@@ -89,48 +89,80 @@ In V2, Deck.gl is layered on top of MapLibre for the bloom-density heatmap, shar
 
 ### Data model
 
-Three tables. The model's virtue is what it omits.
+Four tables. The model's virtue is still what it omits; the fourth exists because October will demand it.
 
 **`trees`** — permanent records of tree locations.
-Columns: `id` (uuid, **UUIDv7** — time-ordered for index locality), `location` (PostGIS geography point, SRID 4326), `h3_cell_r9` (bigint, indexed — fast proximity queries), `h3_cell_r7` (bigint, indexed — heatmap aggregation), `species` (text, default `'jacaranda'`), `created_at` (timestamptz), `created_by_device` (uuid).
+Columns: `id` (uuid, **UUIDv7** — time-ordered for index locality), `location` (PostGIS geography point, SRID 4326), `h3_cell_r9` (bigint, indexed — fast proximity queries), `h3_cell_r7` (bigint, indexed — heatmap aggregation), `species` (text, default `'jacaranda'`), `created_at` (timestamptz), `created_by_device` (uuid), `hidden_at` (timestamptz, nullable — soft-delete for moderation).
 
 **`observations`** — the flowing river of bloom-state reports.
-Columns: `id` (uuid, **UUIDv7**), `tree_id` (uuid, fk), `bloom_state` (enum: `bud`, `peak`, `dropping`), `photo_r2_key` (text, nullable), `observed_at` (timestamptz), `reported_by_device` (uuid). A tree's current state is the most recent observation. Historical observations are preserved forever — they are the archive.
+Columns: `id` (uuid, **UUIDv7**), `tree_id` (uuid, fk), `bloom_state` (enum: `bud`, `peak`, `dropping`), `photo_r2_key` (text, nullable), `observed_at` (timestamptz), `reported_by_device` (uuid), `hidden_at` (timestamptz, nullable). A tree's current state is the most recent non-hidden observation. Historical observations are preserved forever — they are the archive.
 
 **`devices`** — minimal identity for rate-limiting and gentle "your pins" highlighting.
-Columns: `id` (uuid, **UUIDv4** — deliberately random so first-visit timestamps do not leak through the cookie), `first_seen` (timestamptz), `last_seen` (timestamptz).
+Columns: `id` (uuid, **UUIDv4** — deliberately random so first-visit timestamps do not leak through the cookie), `first_seen` (timestamptz), `last_seen` (timestamptz), `blocked_at` (timestamptz, nullable).
+
+**`moderation_queue`** — the one table added for operational sanity, not product ambition.
+Columns: `id` (uuid, UUIDv7), `target_kind` (enum: `tree`, `observation`), `target_id` (uuid), `reason` (text, nullable — submitted by reporter), `reporter_device` (uuid), `created_at` (timestamptz), `resolved_at` (timestamptz, nullable), `resolution` (enum: `hidden`, `dismissed`, nullable). No public UI around reports; a small "report this photo" link behind an overflow menu writes here. The queue exists to make the admin endpoint usable at 2am on launch weekend. If the queue sits empty for two seasons, reconsider.
 
 **ID strategy:** UUIDv7 is used for public-facing, append-heavy tables so B-tree indexes stay cache-friendly and new rows cluster at the right edge of the index — meaningful at 50k+ rows. UUIDv4 is used for `devices.id` because a device ID lives in a user's cookie, and a time-ordered ID would silently leak first-visit timestamps to anyone inspecting the cookie. Privacy wins over index locality for identity.
 
-No `users` table. No `sessions` table. No `comments`, `likes`, `follows`, `reports`, or `notifications` tables. If a fourth table ever becomes necessary, sit with the necessity for a week before adding it.
+No `users` table. No `sessions` table. No `comments`, `likes`, `follows`, or `notifications` tables. If a sixth table ever becomes necessary, sit with the necessity for a week before adding it.
 
 ### Tree identity and deduplication
 
 Tree identity is anchored to exact coordinates, not to H3 cells. H3 is a tessellation used for aggregation and proximity, not an identity system — two branches of the same jacaranda can fall into different H3 r15 cells depending on GPS noise, and two trees on opposite sides of a street can fall into the same r15 cell.
 
-Deduplication happens at write time, not at read time. When a user submits a new pin, the server runs `ST_DWithin(existing.location, new.location, 5)` against the `trees` table filtered by `species`. If a tree already exists within 5 meters, the user is offered a gentle prompt: *"A jacaranda is already pinned near here. Is this the same tree?"* If yes, the new submission becomes an observation on the existing tree. If no, a new tree row is created. This keeps the map honest without requiring moderation.
+Deduplication happens at write time, with a UI that lets the user *see* rather than *guess*. When a user submits a new pin, the server runs `ST_DWithin(existing.location, new.location, 3)` against the `trees` table filtered by `species` and `hidden_at IS NULL`. The radius is 3m, not 5m: on Nairobi's jacaranda-lined streets (Riverside, Ngong Road, Kenyatta Avenue) trees are often 4–6m apart, and a 5m radius fires the prompt against neighbors almost every time.
+
+If any candidates are returned, the user sees a comparison sheet, not a yes/no question: the most recent photo of each candidate tree, its last-observed bloom state, and its distance in meters. Two buttons per candidate: **"This is the same tree"** (becomes an observation on that tree) or a single bottom action **"None of these — pin new tree"** (creates a new row). If the user picks "same tree," their new photo and bloom state are written as an observation on the existing tree; their GPS reading is discarded, so identity stays anchored to the original coordinates.
+
+If no candidates are returned, the pin is created silently with no prompt.
+
+This keeps the map honest without requiring moderation of duplicates, and it refuses to make the user adjudicate under GPS drift.
 
 ### Identity
 
 The app uses no accounts. On first visit, the server sets a `device_id` cookie containing a UUIDv4. This cookie is the only identity the app tracks. It is used for:
 
-- Rate-limiting pin creation (no more than 50 pins per device per day).
+- Rate-limiting pin creation (see below).
 - Rendering the user's own pins with a subtle visual accent.
 - Surfacing "on this day last year" cards during the user's next bloom season.
 
 If a user clears their cookies, they become a new user. This is not a bug. It is a correct model of a private, ephemeral relationship with a tool.
 
+### Rate limiting and abuse
+
+A cookie-only limit is trivially bypassed and was worth naming honestly. V1 uses a two-signal limit: **10 new trees per device per rolling 24 hours, and 30 new trees per IP per rolling 24 hours.** Observations on existing trees are limited separately and more loosely (60 per device per day) because adding an observation to a confirmed tree is a lower-risk action than placing a new pin.
+
+These numbers are tight enough that an enthusiastic user walking their neighborhood during peak bloom can still pin 10 new trees a day and add observations to dozens more, and loose enough that a single bad actor cannot paint the map in an afternoon. If a genuine user hits the limit, the UI says so plainly and invites them back tomorrow. The limits are stored in Postgres (a small counter table, pruned nightly), not Redis — see the caching section.
+
+Abuse beyond rate limits is handled by the moderation path below.
+
+### Moderation
+
+The spec previously claimed no moderation story. October will not allow that.
+
+The moderation surface is deliberately small:
+
+1. Every photo viewer has a small overflow menu with a single action: **"Report this photo"**. Tapping writes a row to `moderation_queue` and optimistically hides the observation for the reporting device only.
+2. Three reports from distinct devices on the same observation auto-hide it globally (sets `hidden_at`) and flag it in the queue for review.
+3. A single admin endpoint (`/admin/queue`, behind a long random token in the binary's config) lists queued items with their photos and lets the operator choose **hide** or **dismiss**. Hiding an `observation` sets `hidden_at`; hiding a `tree` sets `hidden_at` on the tree *and* cascades to its observations. Dismissing marks the queue row resolved and does nothing else.
+4. A `devices.blocked_at` flag exists for the rare case where one device is a repeat bad actor; blocked devices can read the map but their writes return 200 and are silently dropped into the queue as pre-hidden.
+
+No public UI exposes report counts, moderator identity, or queue depth. The operator is a person, not a feature. Expected load is a handful of items per week, spiking during press moments; if it ever exceeds an hour of work per day, the project has a different problem than this spec anticipates.
+
 ### Media handling
 
-Photos are compressed client-side to a maximum of 500KB before upload. The Go server issues a presigned R2 upload URL; the browser PUTs the file directly to R2. The server never touches photo bytes. This keeps the server stateless, cheap, and responsive under peak-bloom load.
+Photos are compressed client-side to a maximum of 500KB before upload. The Go server issues a presigned R2 upload URL scoped to the specific object key, with a **Content-Length** ceiling of 1MB and a **Content-Type** restricted to `image/jpeg` and `image/webp` enforced in the presigned policy. The server never touches photo bytes, but the ceiling means a malicious client cannot PUT a 500MB file directly to the bucket.
 
-Photo URLs served to clients are R2 public URLs through the Cloudflare CDN. No image resizing pipeline in V1 — enforce reasonable upload sizes instead.
+Server-side: on successful upload notification (optional R2 event, otherwise lazy verification on first read), the server issues a HEAD to confirm size and content-type match the policy. Mismatches flag the observation into `moderation_queue` as pre-hidden.
+
+Photo URLs served to clients are R2 public URLs through the Cloudflare CDN. No image resizing pipeline in V1 — the 500KB client-side cap is the pipeline.
 
 ### Proximity and aggregation
 
 Two geographic indexes coexist by design:
 
-- **PostGIS geography** on `trees.location` for exact distance queries, viewport filtering, and the 5-meter deduplication check at write time. Used by `GET /trees?bbox=...`.
+- **PostGIS geography** on `trees.location` for exact distance queries, viewport filtering, and the 3-meter deduplication check at write time. Used by `GET /trees?bbox=...`.
 - **H3 cells** at resolution 9 (~175m edge) and resolution 7 (~1.4km edge) for fast bucketed queries and the V2 heatmap layer. H3 r9 powers "nearby trees" without a spatial join; H3 r7 powers the Deck.gl H3HexagonLayer visualization.
 
 Finer H3 resolutions (r11, r13, r15) were considered and deliberately excluded. H3 is a tessellation, not a coordinate system — at fine resolutions it creates arbitrary cell boundaries that split single trees and merge neighboring ones based on GPS noise. Tree identity is the job of exact coordinates plus the deduplication rule; H3 is the job of aggregation.
@@ -157,9 +189,11 @@ A single VPS (Hetzner CX22 or Digital Ocean equivalent, ~€5/month) running:
 
 Cloudflare sits in front for CDN, caching, and DDoS protection during the October traffic spike. R2 sits beside for photos and tiles. The entire production system costs less than €15/month at expected scale and can absorb a viral spike of 100k visits in a day without operator intervention.
 
+Migrations run manually on deploy — `goose up` is a separate step after `systemctl restart`, not part of the binary's startup path. This is deliberate for two reasons: it prevents a bad migration from taking down the service during a routine deploy, and it forces the operator to read the migration before applying it. The cost is one extra command on deploy weeks; the benefit is that a schema change is always a conscious act.
+
 ### Backups
 
-Nightly `pg_dump` to R2 with 30-day retention. Photos in R2 are implicitly durable (11 nines). The database backup is what matters — it contains the civic memory.
+Nightly `pg_dump` to R2 with 30-day retention, plus a weekly snapshot held for a year. Photos in R2 are implicitly durable (11 nines). The database backup is what matters — it contains the civic memory. Restores should be rehearsed once before launch and once per year thereafter; an untested backup is a wish.
 
 ---
 
@@ -207,25 +241,38 @@ Nightly `pg_dump` to R2 with 30-day retention. Photos in R2 are implicitly durab
 
 - Structured logs to stdout, rotated by journald
 - Uptime Kuma (self-hosted) for uptime monitoring
-- A `/metrics` endpoint exposing pin count, observation count, device count
+- A `/metrics` endpoint exposing pin count, observation count, device count, moderation queue depth
 
 ### Build & deploy
 
 - GitHub Actions for CI (test, lint, build)
 - Single-binary deployment: `scp` to VPS, restart systemd service
-- Migrations run manually on deploy (not auto — this is deliberate)
+- Migrations run manually on deploy (not auto — see Deployment)
 
 ### Conspicuously absent, and why
 
 - No JavaScript framework (React, Vue, Svelte). Alpine + server-rendered HTML is sufficient and outlives framework churn.
-- No ORM. SQL is the right interface for three tables and a spatial query.
+- No ORM. SQL is the right interface for four tables and a spatial query.
 - No Redis or Memcached. Postgres's shared buffer cache and Cloudflare's edge cache are sufficient at expected scale; an application cache layer would add operational surface without measurable benefit.
 - No Kubernetes, no Docker Swarm, no service mesh. One binary, one box.
 - No user analytics SDK. Pin count is the only metric that matters, and it's in the database.
 - No email service. Nothing in V1 sends email.
-- No auth provider. There are no accounts to authenticate.
+- No auth provider. There are no accounts to authenticate. The single admin endpoint is gated by a static token in config, not by a login.
+- No public moderation UI. Reports are a single menu item; the queue is for the operator.
 
 Every item on this absent list is a choice to reduce surface area so the project can be maintained by one person across many years, quietly, while most of the stack continues to work.
+
+---
+
+## Rituals
+
+*The things that are not engineering tasks but belong in the spec because the spec would be dishonest without them.*
+
+- Walk at least three Nairobi streets known for jacarandas before launch, while the trees are still green, so you know them before they bloom.
+- Before each season, re-read this spec and the previous season's notebook. Edit the spec where reality disagrees with it. Edits are the spec working, not failing.
+- Keep a paper notebook during each bloom. No acting on it during the season. Transcribe it to a markdown file in the repo between December and February.
+- Once a year, restore the most recent backup into a scratch database and confirm it works.
+- On the first peak-bloom day of each season, take a screenshot of the map. Print it. Keep the prints.
 
 ---
 
@@ -243,7 +290,6 @@ Phases are measured by what becomes true when they complete, not by elapsed week
 - A local development environment runs the Go server, Postgres, and a blank MapLibre map centered on Nairobi.
 - The PMTiles file for Nairobi has been generated and uploaded to R2 and successfully loads in MapLibre on a real mobile device over cellular data.
 - A git repository exists, committed and backed up.
-- You have walked at least three Nairobi streets known for jacarandas and noticed the trees while they are still green, so you know them before they bloom.
 
 **Progress indicator:** A phone on Mombasa Road loads your empty map in under three seconds.
 
@@ -254,11 +300,13 @@ Phases are measured by what becomes true when they complete, not by elapsed week
 **Completed when:**
 
 - A user can open the site on a phone, tap "+", capture a photo, select a bloom state, and see their pin appear on the map — end to end, in under 20 seconds.
+- The deduplication comparison sheet works: submitting a pin within 3m of an existing tree shows that tree's photo and bloom state for visual comparison, not a text prompt.
 - Other users viewing the site see that pin on their map within seconds of it being created.
 - A user can tap any existing pin and update its bloom state, writing a new observation to the database.
 - The map has a draft version of its custom visual style: muted base, purple pins, distinguishable bloom states.
 - The app works on iOS Safari and Android Chrome. Camera and geolocation permissions flow correctly.
 - A single deployable Go binary runs on the production VPS with TLS and serves real traffic.
+- The moderation queue table exists, the report menu item works, and the admin endpoint can hide items. Tested with a deliberate bad pin submitted by the operator.
 
 **Progress indicator:** You can send the URL to one friend who has never seen it, and they can pin a tree on their street without any instructions from you.
 
@@ -274,6 +322,7 @@ Phases are measured by what becomes true when they complete, not by elapsed week
 - Filter toggles for bloom state work smoothly with no server round-trip.
 - The app passes a keyboard-only navigation test and a screen reader test.
 - Photos are client-side compressed and upload reliably on slow connections.
+- Presigned upload URLs enforce content-length and content-type; a script attempting to upload a large non-image file fails.
 - The site scores 95+ on mobile Lighthouse for performance, accessibility, and best practices.
 - A private soft-launch to twenty carefully chosen people has seeded the map with at least 200 real tree pins across Nairobi.
 
@@ -288,6 +337,7 @@ Phases are measured by what becomes true when they complete, not by elapsed week
 - The public launch has happened, quietly, in the week before the first jacarandas open — typically late August or the first days of September.
 - At least five Kenyan publications, blogs, or widely-followed accounts have been personally contacted with a preview link and a short, honest pitch.
 - Throughout September, October, and November, the app is stable. No unplanned downtime longer than an hour. Photo uploads work. Pins are being created by strangers without your intervention.
+- The moderation queue is checked at least once a day during September–November. Median report-to-resolution time is under 12 hours.
 - A notebook is being kept, by hand, of every feature request, every moment of delight, every bug report, every message from a user. It is not being acted on during the bloom. It is being collected.
 - At peak bloom, the map shows a dense enough constellation of purple pins that a screenshot of it is beautiful on its own terms.
 - You have walked under jacarandas during this bloom with more attention than you would have had without the app.
@@ -303,7 +353,7 @@ Phases are measured by what becomes true when they complete, not by elapsed week
 - A post-season release (December or January) adds the Deck.gl H3HexagonLayer heatmap showing bloom density across the completed season.
 - A time-lapse view replays the bloom wave moving across Nairobi across the September–November period using the accumulated `observations` history.
 - The "on this day last year" gentle resurface is implemented, ready for the next bloom.
-- The previous season's data is archived permanently — downloadable as a single dataset, never deleted, never silently modified.
+- The previous season's data is archived permanently — downloadable as a single dataset, never deleted, never silently modified. Hidden items are excluded from the public archive but preserved in backups.
 - A second, smaller press cycle has happened with the heatmap as the hook.
 
 **Progress indicator:** The app has two distinct reasons to exist across the calendar year — the bloom itself and the retrospective — and both are beautiful.
@@ -328,7 +378,7 @@ Phases are measured by what becomes true when they complete, not by elapsed week
 #### Completed when:
 
 - The app has been running for five or more jacaranda seasons.
-- The codebase has been updated for security but not bloated with features. The data model is still three tables.
+- The codebase has been updated for security but not bloated with features. The data model is still four tables.
 - An ecologist, a journalist, or a planner has used the accumulated data for something that mattered outside the app — a research paper, an article, a civic argument about tree preservation.
 - The project has a named successor or co-maintainer, so its continuity does not depend on one person's attention.
 - When you look at the map, you recognize trees that no longer exist, pinned by people who may no longer live in Nairobi, and the map honors them.
