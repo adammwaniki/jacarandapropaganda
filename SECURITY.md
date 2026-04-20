@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-The Wolenje team takes security vulnerabilities seriously. We appreciate your efforts to responsibly disclose your findings and will make every effort to acknowledge your contributions.
+The team takes security vulnerabilities seriously. We appreciate your efforts to responsibly disclose your findings and will make every effort to acknowledge your contributions.
 
 ### How to Report
 
@@ -10,12 +10,12 @@ The Wolenje team takes security vulnerabilities seriously. We appreciate your ef
 
 #### Option 1: GitHub Security Advisories (Recommended):
 Use GitHub's private vulnerability reporting feature:
-1. Go to the [security tab](https://github.com/adammwaniki/wolenje/security)
+1. Go to the [security tab](https://github.com/adammwaniki/jacarandapropaganda/security)
 2. Click "Report a vulnerability"
 3. Fill out the security advisory form with the details listed below
 
 #### Option 2: Private Discussion
-1. Go to the [discussions tab](https://github.com/adammwaniki/wolenje/discussions)
+1. Go to the [discussions tab](https://github.com/adammwaniki/jacarandapropaganda/discussions)
 2. Start a new discussion in the "Security" category
 3. **Mark the discussion as private** and include the details listed below
 
@@ -48,14 +48,14 @@ After you submit a report, here's what you can expect:
 
 ### Security Best Practices
 
-When using Wolenje in a production environment, we recommend following these security best practices:
+When using JacarandaPropaganda in a production environment, we recommend following these security best practices:
 
 #### Configuration Security
 
 - Always use HTTPS in production environments
 - Use strong, randomly generated secrets and keys
 - Regularly rotate any secrets and certificates
-- Keep your Wolenje instance updates to the latest version
+- Keep your JacarandaPropaganda instance updates to the latest version
 
 #### Infrastructure Security
 
@@ -75,8 +75,8 @@ Security updates will be released as soon as possible after a vulnerability is c
 
 This security policy applies to:
 
--  The main Wolenje server (this repository)
--  Official Wolenje Docker images
+-  The main server (this repository)
+-  Official Docker images
 -  Documentation that could impact security
 
 This policy does not cover:
@@ -90,8 +90,8 @@ This policy does not cover:
 For questions about this security policy or general security concerns, please contact:
 
 - **Security Questions:** Use GitHub Security Advisories or private discussions (see reporting section above)
-- **General Questions:** [GitHub Discussions](https://github.com/adammwaniki/wolenje/discussions)
-- **Non-Security Issues:** [GitHub Issues](https://github.com/adammwaniki/wolenje/issues)
+- **General Questions:** [GitHub Discussions](https://github.com/adammwaniki/jacarandapropaganda/discussions)
+- **Non-Security Issues:** [GitHub Issues](https://github.com/adammwaniki/jacarandapropaganda/issues)
 
 ---
 
