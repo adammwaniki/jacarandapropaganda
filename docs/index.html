@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>JacarandaPropaganda</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400&family=Geist:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+<style>
+  :root {
+    /* Base — clean near-white, slightly warm so it isn't clinical */
+    --paper:       #f6f4ef;
+    --paper-deep:  #ece8df;
+    --paper-edge:  #d8d2c5;
+
+    --ink:         #2f2a35;
+    --ink-soft:    #5c5465;
+    --ink-fade:    #9a93a3;
+
+    /* Accent — kept for UI, NOT for the map proper */
+    --lavender:    #c4b5d4;
+    --lavender-d:  #8a7aa0;
+    --lavender-l:  #e4dcec;
+
+    /* Map semantic colors — function first, mood second */
+    --park:        #c9ddb5;        /* actually green, slightly desaturated */
+    --park-edge:   #a8c088;
+    --water:       #a8c5d9;        /* quiet blue — muted but unmistakably water */
+    --water-edge:  #7ea8c4;
+
+    --pin-red:     #d05a5a;        /* muted brick red for the locate pin */
+
+    --road-casing: #c8bfb0;        /* warm grey outline under roads */
+    --road-fill:   #f9f7f2;        /* near-white road surface */
+    --road-minor:  #e4ddd0;        /* minor road, one step darker */
+    --road-path:   #b8b0a4;        /* dashed path line */
+
+    --building:    #e4dcec;        /* the lavender wash — stays */
+    --building-e:  #c4b5d4;
+
+    --rail:        #8e839a;
+    --boundary:    #b89eb5;
+
+    --shadow-soft: 0 1px 2px rgba(47,42,53,.06), 0 4px 14px rgba(47,42,53,.08);
+    --shadow-pop:  0 2px 4px rgba(47,42,53,.10), 0 12px 32px rgba(47,42,53,.14);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0; padding: 0;
+    height: 100dvh; width: 100vw;
+    overflow: hidden;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- PAPER GRAIN ---------- */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.22;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.16  0 0 0 0 0.20  0 0 0 0.55 0'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>");
+  }
+
+  /* ---------- MAP ---------- */
+  #map {
+    position: absolute; inset: 0;
+    background: var(--paper);
+  }
+
+  /* Soften MapLibre's canvas — gives everything a paper-print feeling */
+  .maplibregl-canvas {
+    filter: contrast(0.96) brightness(1.02);
+  }
+
+  /* Hide the default controls — we're building custom ones */
+  .maplibregl-ctrl-bottom-left,
+  .maplibregl-ctrl-bottom-right,
+  .maplibregl-ctrl-top-right,
+  .maplibregl-ctrl-top-left { display: none !important; }
+
+  /* ---------- BOTTOM PRIMARY ACTION (single FAB) ---------- */
+  .dock {
+    position: absolute;
+    bottom: 28px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+  }
+  .dock-btn {
+    appearance: none;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center; justify-content: center;
+    color: var(--paper);
+    transition: background .18s, transform .12s;
+  }
+  .dock-btn svg {
+    stroke: currentColor;
+    stroke-width: 1.5;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .dock-btn.primary {
+    background: var(--lavender);
+    color: var(--ink);
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    box-shadow:
+      0 2px 4px rgba(138, 122, 160, 0.18),
+      0 8px 16px rgba(138, 122, 160, 0.22),
+      0 18px 36px rgba(138, 122, 160, 0.20),
+      0 32px 60px rgba(138, 122, 160, 0.14);
+    position: relative;
+    transition: background .18s, transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .25s ease;
+  }
+  .dock-btn.primary:hover {
+    background: var(--lavender-d);
+    color: var(--paper);
+    transform: translateY(-2px);
+    box-shadow:
+      0 3px 6px rgba(138, 122, 160, 0.20),
+      0 12px 22px rgba(138, 122, 160, 0.26),
+      0 24px 44px rgba(138, 122, 160, 0.22),
+      0 40px 72px rgba(138, 122, 160, 0.16);
+  }
+  .dock-btn.primary:active {
+    transform: translateY(0) scale(.96);
+    box-shadow:
+      0 1px 2px rgba(138, 122, 160, 0.18),
+      0 4px 10px rgba(138, 122, 160, 0.20),
+      0 10px 20px rgba(138, 122, 160, 0.14);
+  }
+  .dock-btn.primary svg { width: 28px; height: 28px; stroke-width: 1.6; }
+
+  .plus-badge {
+    position: absolute;
+    top: 2px; right: 2px;
+    width: 22px; height: 22px;
+    background: var(--ink);
+    color: var(--lavender);
+    border-radius: 50%;
+    display: flex;
+    align-items: center; justify-content: center;
+    border: 2.5px solid var(--lavender);
+    box-shadow: 0 1px 2px rgba(47,42,53,.3);
+    transition: all .18s;
+  }
+  .plus-badge svg {
+    width: 10px !important; height: 10px !important;
+    stroke: currentColor;
+    stroke-width: 2.2 !important;
+    fill: none;
+    stroke-linecap: round;
+  }
+  .dock-btn.primary:hover .plus-badge {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--paper);
+  }
+
+  /* ---------- HAMBURGER MENU + SLIDING PILLS ---------- */
+  .menu {
+    position: absolute;
+    top: 20px; right: 20px;
+    z-index: 6;
+    /* Container is just the button size; pills are positioned absolutely from its left edge */
+    width: 44px;
+    height: 44px;
+  }
+
+  .menu-btn {
+    appearance: none;
+    background: var(--lavender-l);
+    border: 1px solid var(--paper-edge);
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    box-shadow:
+      0 1px 2px rgba(47, 42, 53, 0.08),
+      0 4px 10px rgba(47, 42, 53, 0.10),
+      0 10px 24px rgba(47, 42, 53, 0.08);
+    cursor: pointer;
+    display: flex;
+    align-items: center; justify-content: center;
+    color: var(--ink);
+    padding: 0;
+    position: relative;
+    z-index: 2;
+    transition: background .15s, color .15s, transform .12s;
+  }
+  .menu-btn:hover {
+    background: var(--lavender-d);
+    color: var(--paper);
+  }
+  .menu-btn:active { transform: scale(.94); }
+
+  /* Hamburger → X morph */
+  .menu-icon {
+    position: relative;
+    width: 18px; height: 14px;
+    display: inline-block;
+  }
+  .menu-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1.6px;
+    background: currentColor;
+    border-radius: 2px;
+    transition: transform .32s cubic-bezier(.2,.8,.2,1), opacity .2s ease, top .32s cubic-bezier(.2,.8,.2,1);
+    transform-origin: center;
+  }
+  .menu-line.top { top: 0; }
+  .menu-line.mid { top: 50%; transform: translateY(-50%); }
+  .menu-line.bot { top: 100%; transform: translateY(-100%); }
+
+  .menu.open .menu-line.top {
+    top: 50%;
+    transform: translateY(-50%) rotate(45deg);
+  }
+  .menu.open .menu-line.mid {
+    opacity: 0;
+    transform: translateY(-50%) scaleX(0);
+  }
+  .menu.open .menu-line.bot {
+    top: 50%;
+    transform: translateY(-50%) rotate(-45deg);
+  }
+
+  /* Pill row — positioned absolutely to the LEFT of the button; button never moves */
+  .menu-pills {
+    position: absolute;
+    top: 0;
+    right: 52px;              /* button width (44) + gap (8) */
+    height: 44px;
+    display: flex;
+    flex-direction: row-reverse;  /* pills fill right-to-left: closest to button first */
+    gap: 8px;
+    pointer-events: none;
+  }
+  .menu.open .menu-pills { pointer-events: auto; }
+
+  .menu-pill {
+    appearance: none;
+    background: var(--lavender-l);
+    border: 1px solid var(--paper-edge);
+    border-radius: 999px;
+    height: 44px;
+    padding: 0 16px 0 14px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    box-shadow:
+      0 1px 2px rgba(47, 42, 53, 0.08),
+      0 4px 10px rgba(47, 42, 53, 0.10),
+      0 10px 24px rgba(47, 42, 53, 0.08);
+    flex-shrink: 0;
+
+    /* Initial: tucked behind the button, translated rightward to hide */
+    opacity: 0;
+    transform: translateX(56px) scale(0.7);
+    transform-origin: right center;
+    transition:
+      opacity .28s ease,
+      transform .4s cubic-bezier(.2,.9,.3,1.1),
+      background .15s,
+      color .15s;
+    transition-delay: calc((2 - var(--i)) * 50ms);
+  }
+  .menu-pill:hover {
+    background: var(--lavender-d);
+    color: var(--paper);
+  }
+  .menu-pill:hover svg { color: var(--paper); }
+
+  .menu.open .menu-pill {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    transition-delay: calc(var(--i) * 60ms);
+  }
+
+  .menu-pill svg {
+    width: 16px; height: 16px;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    color: var(--ink-soft);
+    flex-shrink: 0;
+  }
+
+  /* ---------- ZOOM PILL (right side) ---------- */
+  .zoom {
+    position: absolute;
+    right: 20px; bottom: 96px;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    background: var(--lavender-l);
+    border: 1px solid var(--paper-edge);
+    border-radius: 999px;
+    box-shadow:
+      0 1px 2px rgba(47, 42, 53, 0.08),
+      0 4px 10px rgba(47, 42, 53, 0.10),
+      0 10px 24px rgba(47, 42, 53, 0.08);
+    overflow: hidden;
+  }
+  .zoom-btn {
+    appearance: none;
+    background: transparent;
+    border: none;
+    width: 42px; height: 42px;
+    color: var(--ink);
+    cursor: pointer;
+    display: flex;
+    align-items: center; justify-content: center;
+    padding: 0;
+    transition: background .15s, color .15s;
+  }
+  .zoom-btn:hover {
+    background: var(--lavender-d);
+    color: var(--paper);
+  }
+  .zoom-btn svg {
+    width: 18px; height: 18px;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    fill: none;
+    stroke-linecap: round;
+  }
+  .zoom-btn:first-child { border-bottom: 1px solid var(--paper-edge); }
+
+  .locate {
+    position: absolute;
+    right: 20px; bottom: 210px;
+    z-index: 4;
+    width: 44px; height: 44px;
+    background: var(--lavender-l);
+    border: 1px solid var(--paper-edge);
+    border-radius: 50%;
+    box-shadow:
+      0 1px 2px rgba(47, 42, 53, 0.08),
+      0 4px 10px rgba(47, 42, 53, 0.10),
+      0 10px 24px rgba(47, 42, 53, 0.08);
+    cursor: pointer;
+    display: flex;
+    align-items: center; justify-content: center;
+    color: var(--ink);
+    padding: 0;
+    transition: background .15s, color .15s, transform .12s;
+    --pin-hole: var(--lavender-l);
+  }
+  .locate:hover {
+    background: var(--lavender-d);
+    color: var(--paper);
+    --pin-hole: var(--lavender-d);
+  }
+  .locate:active { transform: scale(0.96); }
+  .locate svg {
+    width: 40px; height: 40px;
+    stroke: currentColor;
+    stroke-width: 0.96;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .locate svg {
+    width: 36px; height: 36px;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  button:focus-visible { outline: 2px solid var(--lavender-d); outline-offset: 2px; }
+
+  /* ---------- FLOATING WORDMARK ---------- */
+  .wordmark {
+    position: absolute;
+    top: 42px;
+    left: 20px;
+    transform: translateY(-50%);
+    z-index: 5;
+    font-family: "Josefin Sans", sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    color: var(--ink);
+    pointer-events: none;
+    user-select: none;
+
+    /* Glassmorphism */
+    padding: 9px 16px 9px 14px;
+    border-radius: 999px;
+    background: radial-gradient(
+      ellipse at center,
+      rgba(246, 244, 239, 0.02) 0%,
+      rgba(246, 244, 239, 0.02) 30%,
+      rgba(228, 220, 236, 1) 100%
+    );
+    backdrop-filter: blur(4px) saturate(1.1);
+    -webkit-backdrop-filter: blur(4px) saturate(1.1);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.32),
+      0 1px 2px rgba(47, 42, 53, 0.04),
+      0 4px 12px rgba(47, 42, 53, 0.05);
+  }
+  @media (max-width: 520px) {
+    .wordmark { font-size: 18px; }
+  }
+
+  /* ---------- SEARCH BAR ---------- */
+  .search {
+    position: absolute;
+    top: 42px;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    width: 220px;
+    max-width: calc(100vw - 160px);
+
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px 9px 16px;
+    border-radius: 999px;
+
+    background: radial-gradient(
+      ellipse at center,
+      rgba(246, 244, 239, 0.02) 0%,
+      rgba(246, 244, 239, 0.02) 30%,
+      rgba(228, 220, 236, 1) 100%
+    );
+    backdrop-filter: blur(4px) saturate(1.1);
+    -webkit-backdrop-filter: blur(4px) saturate(1.1);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.32),
+      0 1px 2px rgba(47, 42, 53, 0.04),
+      0 4px 12px rgba(47, 42, 53, 0.05);
+
+    transition: box-shadow .2s ease, width .55s cubic-bezier(.25,.1,.25,1);
+  }
+  .search.expanded {
+    width: 340px;
+  }
+  .search:focus-within {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.32),
+      0 1px 2px rgba(47, 42, 53, 0.06),
+      0 4px 12px rgba(47, 42, 53, 0.08),
+      0 0 0 2px var(--lavender-d);
+  }
+
+  /* Desktop: hide the trigger button entirely, use the always-expanded pill */
+  .search-trigger {
+    display: none;
+  }
+
+  .search-icon {
+    width: 18px; height: 18px;
+    stroke: var(--ink);
+    stroke-width: 1.6;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+
+  .search-input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--ink);
+    padding: 0;
+    line-height: 1;
+    height: 22px;
+  }
+  .search-input::placeholder {
+    color: var(--ink-soft);
+    opacity: 0.75;
+    font-style: italic;
+    font-family: "Josefin Sans", sans-serif;
+    font-weight: 300;
+  }
+  .search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+  /* ---------- MOBILE: search becomes a collapsible icon below the hamburger ---------- */
+  @media (max-width: 520px) {
+    .search {
+      /* Position under the hamburger (hamburger is at top:20px, height 44px, so 20+44+8 = 72px) */
+      top: 72px;
+      left: auto;
+      right: 20px;
+      transform: none;
+
+      /* Collapsed: round button, icon only */
+      width: 44px;
+      max-width: none;
+      height: 44px;
+      padding: 0;
+      border-radius: 50%;
+      gap: 0;
+      overflow: hidden;
+
+      transition:
+        width .45s cubic-bezier(.25,.1,.25,1),
+        border-radius .45s cubic-bezier(.25,.1,.25,1),
+        padding .45s cubic-bezier(.25,.1,.25,1),
+        box-shadow .2s ease;
+    }
+
+    /* Show the trigger button inside the pill on mobile */
+    .search-trigger {
+      display: flex;
+      appearance: none;
+      background: transparent;
+      border: none;
+      width: 44px; height: 44px;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--ink);
+      padding: 0;
+    }
+    .search-trigger svg {
+      width: 18px; height: 18px;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Hide the inline input + right-icon by default on mobile */
+    .search-input,
+    .search-icon {
+      display: none;
+    }
+
+    /* Expanded state: widen leftward, reveal input, hide the circular trigger */
+    .search.open {
+      width: calc(100vw - 40px);           /* full width minus screen margins */
+      max-width: 340px;
+      padding: 9px 14px 9px 16px;
+      border-radius: 999px;
+    }
+    .search.open .search-trigger {
+      display: none;
+    }
+    .search.open .search-input {
+      display: block;
+      flex: 1;
+    }
+    .search.open .search-icon {
+      display: block;
+    }
+
+    /* Disable desktop expand-on-type behavior on mobile — it conflicts */
+    .search.expanded { width: calc(100vw - 40px); }
+
+    .wordmark { font-size: 18px; }
+  }
+</style>
+</head>
+
+<body>
+
+<div id="map" role="application" aria-label="Map of Nairobi"></div>
+
+<!-- FLOATING WORDMARK -->
+<div class="wordmark" aria-label="JacarandaPropaganda">#JacarandaPropaganda</div>
+
+<!-- SEARCH BAR -->
+<div class="search" id="search" role="search">
+  <button class="search-trigger" id="search-trigger" aria-label="Open search" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="11" cy="11" r="7"/>
+      <path d="M20 20l-3.5-3.5"/>
+    </svg>
+  </button>
+  <input
+    type="search"
+    id="search-input"
+    class="search-input"
+    placeholder="search areas or blooms"
+    aria-label="Search areas or blooms"
+    autocomplete="off"
+  />
+  <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="11" cy="11" r="7"/>
+    <path d="M20 20l-3.5-3.5"/>
+  </svg>
+</div>
+
+<!-- LOCATE -->
+<button class="locate" id="locate" aria-label="Center on my location">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <!-- Cardinal ticks, all centered on (12,12) -->
+    <path d="M 12 1.5 V 4"/>
+    <path d="M 12 20 V 22.5"/>
+    <path d="M 1.5 12 H 4"/>
+    <path d="M 20 12 H 22.5"/>
+    <!-- Four arcs on a circle of radius 10.5, with ~22.6° gaps at each cardinal -->
+    <!-- Endpoints computed: top-right arc from (14,1.69) to (22.31,10) etc. -->
+    <path d="M 14 1.69 A 10.5 10.5 0 0 1 22.31 10"/>
+    <path d="M 22.31 14 A 10.5 10.5 0 0 1 14 22.31"/>
+    <path d="M 10 22.31 A 10.5 10.5 0 0 1 1.69 14"/>
+    <path d="M 1.69 10 A 10.5 10.5 0 0 1 10 1.69"/>
+    <!-- Center dot -->
+    <circle cx="12" cy="12" r="2.55" fill="currentColor" stroke="none"/>
+  </svg>
+</button>
+
+<!-- ZOOM -->
+<div class="zoom" aria-label="Zoom">
+  <button class="zoom-btn" id="zoom-in" aria-label="Zoom in">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 6v12M6 12h12"/>
+    </svg>
+  </button>
+  <button class="zoom-btn" id="zoom-out" aria-label="Zoom out">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 12h12"/>
+    </svg>
+  </button>
+</div>
+
+<!-- BOTTOM DOCK — single primary action -->
+<nav class="dock" aria-label="Primary action">
+  <button class="dock-btn primary" id="fab" aria-label="Pin a tree (take a photo)">
+    <svg viewBox="0 0 24 24">
+      <path d="M3 8a2 2 0 0 1 2-2h2.5l1.5-2h6l1.5 2H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <circle cx="12" cy="13" r="3.5"/>
+      <path d="M18.5 8.5h.01"/>
+    </svg>
+    <span class="plus-badge" aria-hidden="true">
+      <svg viewBox="0 0 12 12"><path d="M6 2v8M2 6h8"/></svg>
+    </span>
+  </button>
+</nav>
+
+<!-- HAMBURGER MENU — pills slide out horizontally -->
+<div class="menu" id="menu">
+  <div class="menu-pills" id="menu-pills" aria-hidden="true">
+    <button class="menu-pill" role="menuitem" style="--i: 0">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 6h13M8 12h13M8 18h13"/>
+        <circle cx="4" cy="6" r="1" fill="currentColor"/>
+        <circle cx="4" cy="12" r="1" fill="currentColor"/>
+        <circle cx="4" cy="18" r="1" fill="currentColor"/>
+      </svg>
+      <span>List</span>
+    </button>
+    <button class="menu-pill" role="menuitem" style="--i: 1">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 5h18l-7 9v6l-4-2v-4z"/>
+      </svg>
+      <span>Filter</span>
+    </button>
+    <button class="menu-pill" role="menuitem" style="--i: 2">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M12 8v5M12 16h.01"/>
+      </svg>
+      <span>About</span>
+    </button>
+  </div>
+
+  <button class="menu-btn" id="menu-btn" aria-label="Menu" aria-expanded="false" aria-controls="menu-pills">
+    <span class="menu-icon" aria-hidden="true">
+      <span class="menu-line top"></span>
+      <span class="menu-line mid"></span>
+      <span class="menu-line bot"></span>
+    </span>
+  </button>
+</div>
+
+<script>
+(() => {
+  // Palette — clean map-first, matches CSS vars above
+  const PAL = {
+    paper:       '#f6f4ef',
+    paperDeep:   '#ece8df',
+    park:        '#c9ddb5',
+    parkEdge:    '#a8c088',
+    water:       '#a8c5d9',
+    waterEdge:   '#7ea8c4',
+    roadCasing:  '#c8bfb0',
+    roadFill:    '#f9f7f2',
+    roadMinor:   '#e4ddd0',
+    roadPath:    '#b8b0a4',
+    building:    '#e4dcec',
+    buildingE:   '#c4b5d4',
+    rail:        '#8e839a',
+    boundary:    '#b89eb5',
+    labelText:   '#3a3340',
+    labelHalo:   '#f6f4ef',
+    labelFaded:  '#6a6270',
+    labelMajor:  '#2a2530'
+  };
+
+  const map = new maplibregl.Map({
+    container: "map",
+    style: "https://tiles.openfreemap.org/styles/positron",
+    center: [36.8172, -1.2864],
+    zoom: 12.4,
+    minZoom: 10,
+    maxZoom: 18,
+    attributionControl: false,
+    pitchWithRotate: false,
+    dragRotate: false,
+    touchPitch: false
+  });
+
+  map.scrollZoom.setWheelZoomRate(1/120);
+
+  map.on('style.load', () => {
+    const style = map.getStyle();
+
+    style.layers.forEach(layer => {
+      const id = layer.id;
+      const type = layer.type;
+
+      try {
+        // Background
+        if (type === 'background') {
+          map.setPaintProperty(id, 'background-color', PAL.paper);
+          return;
+        }
+
+        // ----- LABELS: keep them, but restyle -----
+        if (type === 'symbol') {
+          // Place names (cities, neighborhoods, suburbs)
+          if (/(place|locality|neighbourhood|suburb)/i.test(id)) {
+            try {
+              map.setPaintProperty(id, 'text-color', PAL.labelMajor);
+              map.setPaintProperty(id, 'text-halo-color', PAL.labelHalo);
+              map.setPaintProperty(id, 'text-halo-width', 1.4);
+            } catch (e) {}
+            return;
+          }
+          // Road labels
+          if (/(road|transport|highway|street)/i.test(id)) {
+            try {
+              map.setPaintProperty(id, 'text-color', PAL.labelFaded);
+              map.setPaintProperty(id, 'text-halo-color', PAL.labelHalo);
+              map.setPaintProperty(id, 'text-halo-width', 1.2);
+            } catch (e) {}
+            return;
+          }
+          // POI labels — tone down but keep
+          if (/(poi|amenity)/i.test(id)) {
+            try {
+              map.setPaintProperty(id, 'text-color', PAL.labelFaded);
+              map.setPaintProperty(id, 'text-halo-color', PAL.labelHalo);
+              map.setPaintProperty(id, 'text-halo-width', 1);
+              map.setPaintProperty(id, 'text-opacity', 0.7);
+            } catch (e) {}
+            return;
+          }
+          // Water labels
+          if (/(water|ocean|sea|river|waterway)/i.test(id)) {
+            try {
+              map.setPaintProperty(id, 'text-color', PAL.waterEdge);
+              map.setPaintProperty(id, 'text-halo-color', PAL.labelHalo);
+              map.setPaintProperty(id, 'text-halo-width', 1);
+            } catch (e) {}
+            return;
+          }
+          // Park labels
+          if (/(park|wood|forest)/i.test(id)) {
+            try {
+              map.setPaintProperty(id, 'text-color', PAL.parkEdge);
+              map.setPaintProperty(id, 'text-halo-color', PAL.labelHalo);
+              map.setPaintProperty(id, 'text-halo-width', 1);
+            } catch (e) {}
+            return;
+          }
+          // Default label treatment
+          try {
+            map.setPaintProperty(id, 'text-color', PAL.labelFaded);
+            map.setPaintProperty(id, 'text-halo-color', PAL.labelHalo);
+            map.setPaintProperty(id, 'text-halo-width', 1);
+          } catch (e) {}
+          return;
+        }
+
+        // ----- WATER -----
+        if (/water/i.test(id) && type === 'fill') {
+          map.setPaintProperty(id, 'fill-color', PAL.water);
+          map.setPaintProperty(id, 'fill-opacity', 0.9);
+          return;
+        }
+        if (/water/i.test(id) && type === 'line') {
+          map.setPaintProperty(id, 'line-color', PAL.waterEdge);
+          map.setPaintProperty(id, 'line-opacity', 0.75);
+          return;
+        }
+
+        // ----- PARKS / GREEN -----
+        if (/(park|wood|forest|grass|cemetery|pitch|green|nature)/i.test(id) && type === 'fill') {
+          map.setPaintProperty(id, 'fill-color', PAL.park);
+          map.setPaintProperty(id, 'fill-opacity', 0.75);
+          try { map.setPaintProperty(id, 'fill-outline-color', PAL.parkEdge); } catch (e) {}
+          return;
+        }
+
+        // ----- LANDUSE — subtle tonal shifts on base -----
+        if (/residential/i.test(id) && type === 'fill') {
+          map.setPaintProperty(id, 'fill-color', '#efece4');
+          map.setPaintProperty(id, 'fill-opacity', 0.5);
+          return;
+        }
+        if (/(commercial|industrial|landuse)/i.test(id) && type === 'fill') {
+          map.setPaintProperty(id, 'fill-color', PAL.paperDeep);
+          map.setPaintProperty(id, 'fill-opacity', 0.45);
+          return;
+        }
+
+        // ----- BUILDINGS — the lavender wash stays -----
+        if (/building/i.test(id) && type === 'fill') {
+          map.setPaintProperty(id, 'fill-color', PAL.building);
+          map.setPaintProperty(id, 'fill-opacity', 0.6);
+          try { map.setPaintProperty(id, 'fill-outline-color', PAL.buildingE); } catch (e) {}
+          return;
+        }
+
+        // ----- ROADS: Google-style casing + fill -----
+        if (type === 'line') {
+          // Tunnels — faded, dashed
+          if (/tunnel/i.test(id)) {
+            map.setPaintProperty(id, 'line-color', PAL.roadMinor);
+            map.setPaintProperty(id, 'line-opacity', 0.45);
+            try { map.setPaintProperty(id, 'line-dasharray', [3, 3]); } catch (e) {}
+            return;
+          }
+
+          // Motorway & trunk & primary — all get the same grey family.
+          // Positron usually has both casing and fill layers; style them in sync.
+          if (/(motorway|trunk|primary)/i.test(id)) {
+            if (/(casing|outline|border)/i.test(id)) {
+              map.setPaintProperty(id, 'line-color', PAL.roadCasing);
+              map.setPaintProperty(id, 'line-opacity', 0.9);
+            } else {
+              map.setPaintProperty(id, 'line-color', PAL.roadFill);
+              map.setPaintProperty(id, 'line-opacity', 1);
+            }
+            return;
+          }
+
+          // Secondary / tertiary
+          if (/(secondary|tertiary)/i.test(id)) {
+            if (/(casing|outline|border)/i.test(id)) {
+              map.setPaintProperty(id, 'line-color', PAL.roadCasing);
+              map.setPaintProperty(id, 'line-opacity', 0.8);
+            } else {
+              map.setPaintProperty(id, 'line-color', PAL.roadFill);
+              map.setPaintProperty(id, 'line-opacity', 1);
+            }
+            return;
+          }
+
+          // Paths / footways — dashed, delicate
+          if (/(path|footway|pedestrian|cycle|track)/i.test(id)) {
+            map.setPaintProperty(id, 'line-color', PAL.roadPath);
+            map.setPaintProperty(id, 'line-opacity', 0.55);
+            try { map.setPaintProperty(id, 'line-dasharray', [1.5, 2]); } catch (e) {}
+            return;
+          }
+
+          // Minor/service/street roads
+          if (/(minor|service|street|road)/i.test(id)) {
+            if (/(casing|outline|border)/i.test(id)) {
+              map.setPaintProperty(id, 'line-color', PAL.roadCasing);
+              map.setPaintProperty(id, 'line-opacity', 0.6);
+            } else {
+              map.setPaintProperty(id, 'line-color', PAL.roadFill);
+              map.setPaintProperty(id, 'line-opacity', 0.95);
+            }
+            return;
+          }
+
+          // Rail
+          if (/(rail|tram|subway)/i.test(id)) {
+            map.setPaintProperty(id, 'line-color', PAL.rail);
+            map.setPaintProperty(id, 'line-opacity', 0.5);
+            try { map.setPaintProperty(id, 'line-dasharray', [4, 3]); } catch (e) {}
+            return;
+          }
+
+          // Admin boundaries — readable dashed lavender
+          if (/(boundary|admin)/i.test(id)) {
+            map.setPaintProperty(id, 'line-color', PAL.boundary);
+            map.setPaintProperty(id, 'line-opacity', 0.55);
+            map.setPaintProperty(id, 'line-width', 1);
+            try { map.setPaintProperty(id, 'line-dasharray', [3, 2]); } catch (e) {}
+            return;
+          }
+        }
+      } catch (err) {
+        // silently skip layers that don't accept the property
+      }
+    });
+  });
+
+  // Custom controls
+  document.getElementById("zoom-in").addEventListener("click", () => map.zoomIn());
+  document.getElementById("zoom-out").addEventListener("click", () => map.zoomOut());
+  document.getElementById("locate").addEventListener("click", () => {
+    map.flyTo({ center: [36.8172, -1.2864], zoom: 12.4, duration: 700 });
+  });
+
+  // Hamburger menu
+  const menu = document.getElementById("menu");
+  const menuBtn = document.getElementById("menu-btn");
+  const menuPanel = document.getElementById("menu-panel");
+  let menuOpen = false;
+
+  function setMenu(open) {
+    menuOpen = open;
+    menu.classList.toggle("open", open);
+    menuBtn.setAttribute("aria-expanded", String(open));
+    menuPanel.setAttribute("aria-hidden", String(!open));
+  }
+
+  menuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setMenu(!menuOpen);
+  });
+  document.addEventListener("click", (e) => {
+    if (menuOpen && !menu.contains(e.target)) {
+      setMenu(false);
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && menuOpen) setMenu(false);
+  });
+
+  // Search expand — widens the pill when the user has typed something (desktop)
+  const search = document.getElementById("search");
+  const searchInput = document.getElementById("search-input");
+  const searchTrigger = document.getElementById("search-trigger");
+
+  searchInput.addEventListener("input", () => {
+    search.classList.toggle("expanded", searchInput.value.length > 0);
+  });
+
+  // Mobile: tapping the trigger opens the pill and focuses the input
+  searchTrigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    search.classList.add("open");
+    // Wait for the transition to start so the input is visible before focusing
+    requestAnimationFrame(() => {
+      setTimeout(() => searchInput.focus(), 50);
+    });
+  });
+
+  // Mobile: tapping outside the search closes it (only if empty, otherwise keep it open)
+  document.addEventListener("click", (e) => {
+    if (!search.contains(e.target) && searchInput.value.length === 0) {
+      search.classList.remove("open");
+    }
+  });
+
+  // Mobile: Escape also closes
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      searchInput.value = "";
+      search.classList.remove("expanded");
+      search.classList.remove("open");
+    }
+  });
+
+  map.on('error', (e) => console.warn('map:', e && e.error && e.error.message || e));
+
+})();
+</script>
+
+</body>
+</html>
