@@ -49,6 +49,12 @@
 
     --shadow-soft: 0 1px 2px rgba(47,42,53,.06), 0 4px 14px rgba(47,42,53,.08);
     --shadow-pop:  0 2px 4px rgba(47,42,53,.10), 0 12px 32px rgba(47,42,53,.14);
+
+    /* Glass gradient stops */
+    --glass-clear:  rgba(246, 244, 239, 0.02);
+    --glass-anchor: rgba(228, 220, 236, 1);
+    --glass-border: rgba(255, 255, 255, 0.28);
+    --glass-inset:  rgba(255, 255, 255, 0.32);
   }
 
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -310,6 +316,32 @@
     flex-shrink: 0;
   }
 
+  /* Mobile: pills stack vertically BELOW the hamburger instead of growing leftward */
+  @media (max-width: 520px) {
+    .menu-pills {
+      /* Column layout, anchored to the button's top-right */
+      top: 52px;           /* 44px button + 8px gap */
+      right: 0;
+      left: auto;
+      height: auto;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    .menu-pill {
+      /* Initial: tucked up behind the button */
+      transform: translateY(-56px) scale(0.7);
+      transform-origin: top right;
+      transition:
+        opacity .28s ease,
+        transform .4s cubic-bezier(.2,.9,.3,1.1),
+        background .15s,
+        color .15s;
+    }
+    .menu.open .menu-pill {
+      transform: translateY(0) scale(1);
+    }
+  }
+
   /* ---------- ZOOM PILL (right side) ---------- */
   .zoom {
     position: absolute;
@@ -396,6 +428,286 @@
 
   button:focus-visible { outline: 2px solid var(--lavender-d); outline-offset: 2px; }
 
+  /* ---------- PANEL (Filter / Gallery) ---------- */
+  .panel-scrim {
+    position: fixed; inset: 0;
+    background: rgba(47, 42, 53, 0.28);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    z-index: 14;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .24s ease;
+  }
+  .panel-scrim.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .panel {
+    position: fixed;
+    bottom: 0; left: 50%;
+    transform: translate(-50%, 100%);
+    z-index: 15;
+    width: 100%;
+    max-width: 480px;
+    max-height: 78dvh;
+    background: var(--paper);
+    border-top-left-radius: 18px;
+    border-top-right-radius: 18px;
+    border: 1px solid var(--paper-edge);
+    border-bottom: none;
+    box-shadow: 0 -8px 30px rgba(47, 42, 53, 0.18);
+    padding: 8px 22px 24px;
+    overflow-y: auto;
+    pointer-events: none;
+    transition: transform .34s cubic-bezier(.2,.8,.2,1);
+  }
+  .panel.open {
+    transform: translate(-50%, 0);
+    pointer-events: auto;
+  }
+
+  /* On larger screens, centre the panel instead of bottom-sheet */
+  @media (min-width: 720px) {
+    .panel {
+      bottom: auto;
+      top: 50%;
+      transform: translate(-50%, calc(-50% + 40px));
+      opacity: 0;
+      border-radius: 14px;
+      border-bottom: 1px solid var(--paper-edge);
+      max-width: 440px;
+    }
+    .panel.open {
+      transform: translate(-50%, -50%);
+      opacity: 1;
+    }
+  }
+
+  .panel-handle {
+    width: 40px; height: 4px;
+    background: var(--paper-edge);
+    border-radius: 2px;
+    margin: 4px auto 14px;
+  }
+  @media (min-width: 720px) {
+    .panel-handle { display: none; }
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+  .panel-title {
+    font-family: "Josefin Sans", sans-serif;
+    font-weight: 500;
+    font-size: 22px;
+    letter-spacing: 0.005em;
+    line-height: 1.1;
+    color: var(--ink);
+    margin: 0;
+  }
+  .panel-close {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--paper-edge);
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--ink-soft);
+    display: flex;
+    align-items: center; justify-content: center;
+    transition: background .15s, color .15s, border-color .15s;
+    flex-shrink: 0;
+  }
+  .panel-close:hover {
+    background: var(--lavender-l);
+    color: var(--ink);
+    border-color: var(--lavender-d);
+  }
+  .panel-close svg {
+    width: 16px; height: 16px;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    fill: none;
+    stroke-linecap: round;
+  }
+
+  .panel-sub {
+    margin: 0 0 18px 0;
+    font-size: 13px;
+    color: var(--ink-soft);
+    font-style: italic;
+    font-family: "Josefin Sans", sans-serif;
+    font-weight: 400;
+  }
+
+  /* ---------- FILTER ROWS ---------- */
+  .filter-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .filter-row {
+    display: grid;
+    grid-template-columns: 14px 1fr 36px;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    position: relative;
+    transition: background .12s;
+  }
+  .filter-row:hover { background: var(--lavender-l); }
+  .filter-row input[type="checkbox"] {
+    position: absolute;
+    width: 0; height: 0;
+    opacity: 0;
+  }
+  .bloom-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 1.5px var(--paper), 0 0 0 2.5px rgba(47, 42, 53, 0.08);
+  }
+  .filter-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .filter-label strong {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .filter-label em {
+    font-size: 12px;
+    font-style: italic;
+    font-family: "Josefin Sans", sans-serif;
+    font-weight: 300;
+    color: var(--ink-soft);
+  }
+
+  /* iOS-style toggle */
+  .toggle {
+    width: 36px; height: 22px;
+    background: var(--paper-edge);
+    border-radius: 999px;
+    position: relative;
+    transition: background .18s;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .toggle::before {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 18px; height: 18px;
+    background: var(--paper);
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(47, 42, 53, 0.18);
+    transition: transform .22s cubic-bezier(.3,.8,.3,1);
+  }
+  .filter-row input[type="checkbox"]:checked ~ .toggle {
+    background: var(--lavender-d);
+  }
+  .filter-row input[type="checkbox"]:checked ~ .toggle::before {
+    transform: translateX(14px);
+  }
+
+  /* ---------- GALLERY EMPTY ---------- */
+  .gallery-empty {
+    padding: 40px 20px 28px;
+    text-align: center;
+    color: var(--ink-soft);
+  }
+  .gallery-empty svg {
+    width: 56px; height: 56px;
+    stroke: currentColor;
+    stroke-width: 1.2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.4;
+    margin-bottom: 14px;
+  }
+  .gallery-empty p {
+    font-family: "Josefin Sans", sans-serif;
+    font-weight: 300;
+    font-style: italic;
+    font-size: 15px;
+    line-height: 1.5;
+    max-width: 280px;
+    margin: 0 auto;
+  }
+
+  /* ---------- ABOUT ---------- */
+  .about-body {
+    padding: 4px 2px 0;
+    color: var(--ink);
+  }
+  .about-body p {
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 0 0 14px 0;
+    color: var(--ink);
+  }
+  .about-lede {
+    font-family: "Josefin Sans", sans-serif;
+    font-weight: 400;
+    font-size: 16px !important;
+    font-style: italic;
+    line-height: 1.5 !important;
+    color: var(--ink) !important;
+    margin-bottom: 20px !important;
+  }
+  .about-lede strong {
+    font-style: normal;
+    font-weight: 700;
+    color: var(--lavender-d);
+  }
+  .about-rule {
+    border: none;
+    border-top: 1px solid var(--paper-edge);
+    margin: 20px 0 18px;
+  }
+  .about-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 16px;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .about-meta dt {
+    font-family: "Josefin Sans", sans-serif;
+    font-style: italic;
+    font-weight: 300;
+    color: var(--ink-fade);
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .about-meta dd {
+    margin: 0;
+    color: var(--ink);
+  }
+  .about-meta a {
+    color: var(--lavender-d);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color .15s;
+  }
+  .about-meta a:hover {
+    border-bottom-color: var(--lavender-d);
+  }
+
   /* ---------- FLOATING WORDMARK ---------- */
   .wordmark {
     position: absolute;
@@ -415,17 +727,16 @@
     /* Glassmorphism */
     padding: 9px 16px 9px 14px;
     border-radius: 999px;
-    background: radial-gradient(
-      ellipse at center,
-      rgba(246, 244, 239, 0.02) 0%,
-      rgba(246, 244, 239, 0.02) 30%,
-      rgba(228, 220, 236, 1) 100%
+    background: linear-gradient(
+      135deg,
+      var(--glass-clear) 0%,
+      var(--glass-anchor) 100%
     );
     backdrop-filter: blur(4px) saturate(1.1);
     -webkit-backdrop-filter: blur(4px) saturate(1.1);
-    border: 1px solid rgba(255, 255, 255, 0.28);
+    border: 1px solid var(--glass-border);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.32),
+      inset 0 1px 0 var(--glass-inset),
       0 1px 2px rgba(47, 42, 53, 0.04),
       0 4px 12px rgba(47, 42, 53, 0.05);
   }
@@ -451,15 +762,15 @@
 
     background: radial-gradient(
       ellipse at center,
-      rgba(246, 244, 239, 0.02) 0%,
-      rgba(246, 244, 239, 0.02) 30%,
-      rgba(228, 220, 236, 1) 100%
+      var(--glass-clear) 0%,
+      var(--glass-clear) 30%,
+      var(--glass-anchor) 100%
     );
     backdrop-filter: blur(4px) saturate(1.1);
     -webkit-backdrop-filter: blur(4px) saturate(1.1);
-    border: 1px solid rgba(255, 255, 255, 0.28);
+    border: 1px solid var(--glass-border);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.32),
+      inset 0 1px 0 var(--glass-inset),
       0 1px 2px rgba(47, 42, 53, 0.04),
       0 4px 12px rgba(47, 42, 53, 0.05);
 
@@ -470,7 +781,7 @@
   }
   .search:focus-within {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.32),
+      inset 0 1px 0 var(--glass-inset),
       0 1px 2px rgba(47, 42, 53, 0.06),
       0 4px 12px rgba(47, 42, 53, 0.08),
       0 0 0 2px var(--lavender-d);
@@ -482,14 +793,14 @@
   }
 
   .search-icon {
-    width: 18px; height: 18px;
+    width: 20px; height: 20px;
     stroke: var(--ink);
-    stroke-width: 1.6;
+    stroke-width: 2;
     fill: none;
     stroke-linecap: round;
     stroke-linejoin: round;
     flex-shrink: 0;
-    opacity: 0.7;
+    opacity: 1;
   }
 
   .search-input {
@@ -507,11 +818,11 @@
     height: 22px;
   }
   .search-input::placeholder {
-    color: var(--ink-soft);
-    opacity: 0.75;
+    color: var(--ink);
+    opacity: 0.85;
     font-style: italic;
     font-family: "Josefin Sans", sans-serif;
-    font-weight: 300;
+    font-weight: 500;
   }
   .search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
@@ -657,6 +968,126 @@
   </button>
 </div>
 
+<!-- FILTER PANEL -->
+<div class="panel-scrim" id="panel-scrim" aria-hidden="true"></div>
+
+<aside class="panel" id="panel-filter" role="dialog" aria-labelledby="panel-filter-title" aria-hidden="true">
+  <div class="panel-handle" aria-hidden="true"></div>
+  <div class="panel-header">
+    <h2 class="panel-title" id="panel-filter-title">Filter by bloom state</h2>
+    <button class="panel-close" data-close-panel aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <p class="panel-sub">Show trees currently in…</p>
+  <div class="filter-rows">
+    <label class="filter-row">
+      <span class="bloom-dot" style="background: #a8c088"></span>
+      <span class="filter-label">
+        <strong>Budding</strong>
+        <em>tight green buds, not yet open</em>
+      </span>
+      <input type="checkbox" data-bloom="budding" checked />
+      <span class="toggle"></span>
+    </label>
+    <label class="filter-row">
+      <span class="bloom-dot" style="background: #a890c4"></span>
+      <span class="filter-label">
+        <strong>Partial bloom</strong>
+        <em>first flowers opening, still mostly green</em>
+      </span>
+      <input type="checkbox" data-bloom="partial" checked />
+      <span class="toggle"></span>
+    </label>
+    <label class="filter-row">
+      <span class="bloom-dot" style="background: #6a3d9a"></span>
+      <span class="filter-label">
+        <strong>Full bloom</strong>
+        <em>the whole canopy is violet</em>
+      </span>
+      <input type="checkbox" data-bloom="full" checked />
+      <span class="toggle"></span>
+    </label>
+    <label class="filter-row">
+      <span class="bloom-dot" style="background: #b48889"></span>
+      <span class="filter-label">
+        <strong>Fading</strong>
+        <em>petals falling, carpet below</em>
+      </span>
+      <input type="checkbox" data-bloom="fading" checked />
+      <span class="toggle"></span>
+    </label>
+  </div>
+</aside>
+
+<!-- GALLERY PANEL -->
+<aside class="panel panel-gallery" id="panel-gallery" role="dialog" aria-labelledby="panel-gallery-title" aria-hidden="true">
+  <div class="panel-handle" aria-hidden="true"></div>
+  <div class="panel-header">
+    <h2 class="panel-title" id="panel-gallery-title">Gallery</h2>
+    <button class="panel-close" data-close-panel aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <p class="panel-sub">Every photo ever pinned, newest first.</p>
+  <div class="gallery-empty">
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <rect x="8" y="12" width="32" height="26" rx="3"/>
+      <circle cx="24" cy="26" r="6"/>
+      <path d="M14 12l3-4h14l3 4"/>
+    </svg>
+    <p>No photos yet. The first bloom arrives in September — come back then.</p>
+  </div>
+</aside>
+
+<!-- ABOUT PANEL -->
+<aside class="panel panel-about" id="panel-about" role="dialog" aria-labelledby="panel-about-title" aria-hidden="true">
+  <div class="panel-handle" aria-hidden="true"></div>
+  <div class="panel-header">
+    <h2 class="panel-title" id="panel-about-title">About</h2>
+    <button class="panel-close" data-close-panel aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+
+  <div class="about-body">
+    <p class="about-lede">
+      A living map of Nairobi's jacaranda season. Named in tribute to the
+      <strong>#JacarandaPropaganda</strong> hashtag that the city's people already
+      share each October, and in quiet protest against the disappearance of the
+      trees that inspired it.
+    </p>
+
+    <p>
+      Pin the trees you walk past. Update the ones others have pinned.
+      The map reflects the city's bloom in real time.
+    </p>
+
+    <p>
+      No accounts. No notifications. No feeds, no likes, no streaks.
+      Your photos and pins belong to the civic record, not to any platform.
+      Each October the map fills up again; each November it quiets.
+      Dormancy is part of the rhythm the trees themselves keep.
+    </p>
+
+    <hr class="about-rule" />
+
+    <dl class="about-meta">
+      <dt>Made in</dt>
+      <dd>Nairobi, 2026.</dd>
+
+      <dt>Map data</dt>
+      <dd>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors. Tiles from <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>.</dd>
+
+      <dt>Source</dt>
+      <dd><a href="https://github.com/adammwaniki/jacarandapropaganda" target="_blank" rel="noopener">github.com/adammwaniki/jacarandapropaganda</a>. <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache 2.0</a>.</dd>
+
+      <dt>Report a photo</dt>
+      <dd><a href="mailto:hello@jacarandapropaganda.org">hello@jacarandapropaganda.org</a></dd>
+    </dl>
+  </div>
+</aside>
+
 <!-- BOTTOM DOCK — single primary action -->
 <nav class="dock" aria-label="Primary action">
   <button class="dock-btn primary" id="fab" aria-label="Pin a tree (take a photo)">
@@ -674,22 +1105,22 @@
 <!-- HAMBURGER MENU — pills slide out horizontally -->
 <div class="menu" id="menu">
   <div class="menu-pills" id="menu-pills" aria-hidden="true">
-    <button class="menu-pill" role="menuitem" style="--i: 0">
+    <button class="menu-pill" role="menuitem" id="pill-gallery" style="--i: 0">
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M8 6h13M8 12h13M8 18h13"/>
-        <circle cx="4" cy="6" r="1" fill="currentColor"/>
-        <circle cx="4" cy="12" r="1" fill="currentColor"/>
-        <circle cx="4" cy="18" r="1" fill="currentColor"/>
+        <rect x="3" y="3" width="7" height="7" rx="1"/>
+        <rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/>
+        <rect x="14" y="14" width="7" height="7" rx="1"/>
       </svg>
-      <span>List</span>
+      <span>Gallery</span>
     </button>
-    <button class="menu-pill" role="menuitem" style="--i: 1">
+    <button class="menu-pill" role="menuitem" id="pill-filter" style="--i: 1">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M3 5h18l-7 9v6l-4-2v-4z"/>
       </svg>
       <span>Filter</span>
     </button>
-    <button class="menu-pill" role="menuitem" style="--i: 2">
+    <button class="menu-pill" role="menuitem" id="pill-about" style="--i: 2">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="9"/>
         <path d="M12 8v5M12 16h.01"/>
@@ -710,6 +1141,7 @@
 <script>
 (() => {
   // Palette — clean map-first, matches CSS vars above
+  // Map palette
   const PAL = {
     paper:       '#f6f4ef',
     paperDeep:   '#ece8df',
@@ -731,6 +1163,7 @@
     labelMajor:  '#2a2530'
   };
 
+
   const map = new maplibregl.Map({
     container: "map",
     style: "https://tiles.openfreemap.org/styles/positron",
@@ -746,8 +1179,9 @@
 
   map.scrollZoom.setWheelZoomRate(1/120);
 
-  map.on('style.load', () => {
+  function repaintMap() {
     const style = map.getStyle();
+    if (!style || !style.layers) return;
 
     style.layers.forEach(layer => {
       const id = layer.id;
@@ -760,10 +1194,25 @@
           return;
         }
 
-        // ----- LABELS: keep them, but restyle -----
+        // ----- LABELS -----
         if (type === 'symbol') {
-          // Place names (cities, neighborhoods, suburbs)
-          if (/(place|locality|neighbourhood|suburb)/i.test(id)) {
+          if (/(water|ocean|sea|river|waterway|lake|bay)/i.test(id)) {
+            try {
+              map.setPaintProperty(id, 'text-color', PAL.waterEdge);
+              map.setPaintProperty(id, 'text-halo-color', PAL.labelHalo);
+              map.setPaintProperty(id, 'text-halo-width', 1);
+            } catch (e) {}
+            return;
+          }
+          if (/(park|wood|forest|landcover)/i.test(id)) {
+            try {
+              map.setPaintProperty(id, 'text-color', PAL.parkEdge);
+              map.setPaintProperty(id, 'text-halo-color', PAL.labelHalo);
+              map.setPaintProperty(id, 'text-halo-width', 1);
+            } catch (e) {}
+            return;
+          }
+          if (/(place|locality|neighbourhood|suburb|country|state|city|town|village)/i.test(id)) {
             try {
               map.setPaintProperty(id, 'text-color', PAL.labelMajor);
               map.setPaintProperty(id, 'text-halo-color', PAL.labelHalo);
@@ -771,7 +1220,6 @@
             } catch (e) {}
             return;
           }
-          // Road labels
           if (/(road|transport|highway|street)/i.test(id)) {
             try {
               map.setPaintProperty(id, 'text-color', PAL.labelFaded);
@@ -780,7 +1228,6 @@
             } catch (e) {}
             return;
           }
-          // POI labels — tone down but keep
           if (/(poi|amenity)/i.test(id)) {
             try {
               map.setPaintProperty(id, 'text-color', PAL.labelFaded);
@@ -790,25 +1237,6 @@
             } catch (e) {}
             return;
           }
-          // Water labels
-          if (/(water|ocean|sea|river|waterway)/i.test(id)) {
-            try {
-              map.setPaintProperty(id, 'text-color', PAL.waterEdge);
-              map.setPaintProperty(id, 'text-halo-color', PAL.labelHalo);
-              map.setPaintProperty(id, 'text-halo-width', 1);
-            } catch (e) {}
-            return;
-          }
-          // Park labels
-          if (/(park|wood|forest)/i.test(id)) {
-            try {
-              map.setPaintProperty(id, 'text-color', PAL.parkEdge);
-              map.setPaintProperty(id, 'text-halo-color', PAL.labelHalo);
-              map.setPaintProperty(id, 'text-halo-width', 1);
-            } catch (e) {}
-            return;
-          }
-          // Default label treatment
           try {
             map.setPaintProperty(id, 'text-color', PAL.labelFaded);
             map.setPaintProperty(id, 'text-halo-color', PAL.labelHalo);
@@ -817,58 +1245,62 @@
           return;
         }
 
-        // ----- WATER -----
-        if (/water/i.test(id) && type === 'fill') {
-          map.setPaintProperty(id, 'fill-color', PAL.water);
-          map.setPaintProperty(id, 'fill-opacity', 0.9);
-          return;
-        }
-        if (/water/i.test(id) && type === 'line') {
-          map.setPaintProperty(id, 'line-color', PAL.waterEdge);
-          map.setPaintProperty(id, 'line-opacity', 0.75);
-          return;
+        // ----- WATER (fill and line) -----
+        if (/water/i.test(id)) {
+          if (type === 'fill') {
+            map.setPaintProperty(id, 'fill-color', PAL.water);
+            map.setPaintProperty(id, 'fill-opacity', 1);
+            return;
+          }
+          if (type === 'line') {
+            map.setPaintProperty(id, 'line-color', PAL.waterEdge);
+            map.setPaintProperty(id, 'line-opacity', 0.8);
+            return;
+          }
         }
 
         // ----- PARKS / GREEN -----
-        if (/(park|wood|forest|grass|cemetery|pitch|green|nature)/i.test(id) && type === 'fill') {
+        if (/(^park|park$|_park|wood|forest|grass|cemetery|pitch|golf|landcover)/i.test(id) && type === 'fill') {
           map.setPaintProperty(id, 'fill-color', PAL.park);
-          map.setPaintProperty(id, 'fill-opacity', 0.75);
+          map.setPaintProperty(id, 'fill-opacity', 0.8);
           try { map.setPaintProperty(id, 'fill-outline-color', PAL.parkEdge); } catch (e) {}
           return;
         }
 
-        // ----- LANDUSE — subtle tonal shifts on base -----
-        if (/residential/i.test(id) && type === 'fill') {
-          map.setPaintProperty(id, 'fill-color', '#efece4');
-          map.setPaintProperty(id, 'fill-opacity', 0.5);
-          return;
-        }
-        if (/(commercial|industrial|landuse)/i.test(id) && type === 'fill') {
-          map.setPaintProperty(id, 'fill-color', PAL.paperDeep);
-          map.setPaintProperty(id, 'fill-opacity', 0.45);
-          return;
-        }
-
-        // ----- BUILDINGS — the lavender wash stays -----
-        if (/building/i.test(id) && type === 'fill') {
+        // ----- BUILDINGS (before landuse so they win) -----
+        if (/building/i.test(id) && (type === 'fill' || type === 'fill-extrusion')) {
           map.setPaintProperty(id, 'fill-color', PAL.building);
-          map.setPaintProperty(id, 'fill-opacity', 0.6);
+          map.setPaintProperty(id, 'fill-opacity', 0.75);
           try { map.setPaintProperty(id, 'fill-outline-color', PAL.buildingE); } catch (e) {}
           return;
         }
 
-        // ----- ROADS: Google-style casing + fill -----
+        // ----- LANDUSE (residential/commercial/industrial) -----
+        if (/residential/i.test(id) && type === 'fill') {
+          map.setPaintProperty(id, 'fill-color', PAL.paperDeep);
+          map.setPaintProperty(id, 'fill-opacity', 0.35);
+          return;
+        }
+        if (/(commercial|industrial)/i.test(id) && type === 'fill') {
+          map.setPaintProperty(id, 'fill-color', PAL.paperDeep);
+          map.setPaintProperty(id, 'fill-opacity', 0.5);
+          return;
+        }
+        // Generic landuse — same as background so it doesn't cover parks
+        if (/landuse/i.test(id) && type === 'fill') {
+          map.setPaintProperty(id, 'fill-color', PAL.paper);
+          map.setPaintProperty(id, 'fill-opacity', 0.35);
+          return;
+        }
+
+        // ----- ROADS -----
         if (type === 'line') {
-          // Tunnels — faded, dashed
           if (/tunnel/i.test(id)) {
             map.setPaintProperty(id, 'line-color', PAL.roadMinor);
-            map.setPaintProperty(id, 'line-opacity', 0.45);
+            map.setPaintProperty(id, 'line-opacity', 0.4);
             try { map.setPaintProperty(id, 'line-dasharray', [3, 3]); } catch (e) {}
             return;
           }
-
-          // Motorway & trunk & primary — all get the same grey family.
-          // Positron usually has both casing and fill layers; style them in sync.
           if (/(motorway|trunk|primary)/i.test(id)) {
             if (/(casing|outline|border)/i.test(id)) {
               map.setPaintProperty(id, 'line-color', PAL.roadCasing);
@@ -879,8 +1311,6 @@
             }
             return;
           }
-
-          // Secondary / tertiary
           if (/(secondary|tertiary)/i.test(id)) {
             if (/(casing|outline|border)/i.test(id)) {
               map.setPaintProperty(id, 'line-color', PAL.roadCasing);
@@ -891,16 +1321,12 @@
             }
             return;
           }
-
-          // Paths / footways — dashed, delicate
           if (/(path|footway|pedestrian|cycle|track)/i.test(id)) {
             map.setPaintProperty(id, 'line-color', PAL.roadPath);
             map.setPaintProperty(id, 'line-opacity', 0.55);
             try { map.setPaintProperty(id, 'line-dasharray', [1.5, 2]); } catch (e) {}
             return;
           }
-
-          // Minor/service/street roads
           if (/(minor|service|street|road)/i.test(id)) {
             if (/(casing|outline|border)/i.test(id)) {
               map.setPaintProperty(id, 'line-color', PAL.roadCasing);
@@ -911,16 +1337,12 @@
             }
             return;
           }
-
-          // Rail
           if (/(rail|tram|subway)/i.test(id)) {
             map.setPaintProperty(id, 'line-color', PAL.rail);
             map.setPaintProperty(id, 'line-opacity', 0.5);
             try { map.setPaintProperty(id, 'line-dasharray', [4, 3]); } catch (e) {}
             return;
           }
-
-          // Admin boundaries — readable dashed lavender
           if (/(boundary|admin)/i.test(id)) {
             map.setPaintProperty(id, 'line-color', PAL.boundary);
             map.setPaintProperty(id, 'line-opacity', 0.55);
@@ -930,10 +1352,12 @@
           }
         }
       } catch (err) {
-        // silently skip layers that don't accept the property
+        // silently skip
       }
     });
-  });
+  }
+
+  map.on('style.load', repaintMap);
 
   // Custom controls
   document.getElementById("zoom-in").addEventListener("click", () => map.zoomIn());
@@ -945,14 +1369,14 @@
   // Hamburger menu
   const menu = document.getElementById("menu");
   const menuBtn = document.getElementById("menu-btn");
-  const menuPanel = document.getElementById("menu-panel");
+  const menuPills = document.getElementById("menu-pills");
   let menuOpen = false;
 
   function setMenu(open) {
     menuOpen = open;
     menu.classList.toggle("open", open);
     menuBtn.setAttribute("aria-expanded", String(open));
-    menuPanel.setAttribute("aria-hidden", String(!open));
+    if (menuPills) menuPills.setAttribute("aria-hidden", String(!open));
   }
 
   menuBtn.addEventListener("click", (e) => {
@@ -966,6 +1390,59 @@
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && menuOpen) setMenu(false);
+  });
+
+  // Panels (Filter, Gallery)
+  const panelScrim = document.getElementById("panel-scrim");
+  const panels = {
+    filter: document.getElementById("panel-filter"),
+    gallery: document.getElementById("panel-gallery"),
+    about: document.getElementById("panel-about")
+  };
+
+  function openPanel(name) {
+    // close any other panel first
+    Object.values(panels).forEach(p => {
+      p.classList.remove("open");
+      p.setAttribute("aria-hidden", "true");
+    });
+    const panel = panels[name];
+    if (!panel) return;
+    panel.classList.add("open");
+    panel.setAttribute("aria-hidden", "false");
+    panelScrim.classList.add("open");
+    panelScrim.setAttribute("aria-hidden", "false");
+    setMenu(false); // close hamburger
+  }
+
+  function closePanels() {
+    Object.values(panels).forEach(p => {
+      p.classList.remove("open");
+      p.setAttribute("aria-hidden", "true");
+    });
+    panelScrim.classList.remove("open");
+    panelScrim.setAttribute("aria-hidden", "true");
+  }
+
+  panelScrim.addEventListener("click", closePanels);
+  document.querySelectorAll("[data-close-panel]").forEach(btn => {
+    btn.addEventListener("click", closePanels);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closePanels();
+  });
+
+  document.getElementById("pill-filter").addEventListener("click", () => openPanel("filter"));
+  document.getElementById("pill-gallery").addEventListener("click", () => openPanel("gallery"));
+  document.getElementById("pill-about").addEventListener("click", () => openPanel("about"));
+
+  // Filter state (currently wired to internal state only; no pins exist yet)
+  const bloomFilters = { budding: true, partial: true, full: true, fading: true };
+  document.querySelectorAll('input[type="checkbox"][data-bloom]').forEach(cb => {
+    cb.addEventListener("change", () => {
+      bloomFilters[cb.dataset.bloom] = cb.checked;
+      // When pins exist, applying filters happens here.
+    });
   });
 
   // Search expand — widens the pill when the user has typed something (desktop)
