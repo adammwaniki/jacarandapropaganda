@@ -1,0 +1,60 @@
+name: jacarandapropaganda
+
+services:
+  postgres:
+    build:
+      context: ./docker/postgres
+    image: jacaranda-postgres:16-postgis-h3
+    container_name: jacaranda-postgres
+    environment:
+      POSTGRES_USER: jacaranda
+      POSTGRES_PASSWORD: jacaranda
+      POSTGRES_DB: jacaranda
+    ports:
+      # Host 55432 → container 5432. Non-standard to avoid colliding with
+      # any local Postgres the maintainer already has running for other work.
+      - "55432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jacaranda -d jacaranda"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    container_name: jacaranda-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio-setup:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb -p local/jacaranda-photos || true &&
+      mc mb -p local/jacaranda-tiles || true &&
+      mc anonymous set download local/jacaranda-photos &&
+      mc anonymous set download local/jacaranda-tiles
+      "
+
+volumes:
+  pg_data:
+  minio_data:

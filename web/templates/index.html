@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>JacarandaPropaganda</title>
+  <meta name="description" content="A living map of Nairobi's jacaranda season, updated by the people who walk beneath them.">
+  <meta name="theme-color" content="#3b1d6b">
+
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; background: #0c0712; font-family: system-ui, sans-serif; }
+    #map { position: fixed; inset: 0; }
+    .attribution {
+      position: fixed; bottom: 0; right: 0;
+      padding: 4px 8px; font-size: 11px; color: #bca9dd;
+      background: rgba(20, 10, 35, 0.6);
+    }
+  </style>
+</head>
+<body>
+  <div id="map" aria-label="Map of Nairobi jacaranda trees"></div>
+  <div class="attribution">© OpenStreetMap contributors · Protomaps</div>
+
+  <script defer src="https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/pmtiles@3.2.1/dist/pmtiles.js"></script>
+
+  <script>
+    (function () {
+      // Nairobi CBD. The initial view is intentionally muted: wide enough
+      // to see the city, tight enough that a pin feels local.
+      const NAIROBI = [36.8219, -1.2921];
+
+      const protocol = new pmtiles.Protocol();
+      maplibregl.addProtocol('pmtiles', protocol.tile);
+
+      const pmtilesURL = {{ .PMTilesURL }};
+
+      const map = new maplibregl.Map({
+        container: 'map',
+        center: NAIROBI,
+        zoom: 11,
+        minZoom: 9,
+        maxZoom: 19,
+        hash: true,
+        style: {
+          version: 8,
+          sources: pmtilesURL ? {
+            'protomaps': {
+              type: 'vector',
+              url: 'pmtiles://' + pmtilesURL,
+              attribution: '© OpenStreetMap · Protomaps'
+            }
+          } : {},
+          // Placeholder muted style. Phase G replaces this with a hand-crafted
+          // style JSON that is the project's visual identity.
+          layers: [
+            {
+              id: 'background',
+              type: 'background',
+              paint: { 'background-color': '#120820' }
+            }
+          ]
+        }
+      });
+
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+
+      window.__jpMap = map; // test + debug hook
+    })();
+  </script>
+</body>
+</html>
