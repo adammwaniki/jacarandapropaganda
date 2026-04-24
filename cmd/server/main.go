@@ -46,6 +46,7 @@ func main() {
 
 	deps := app.Deps{
 		Devices: store.NewDeviceStore(db),
+		Trees:   store.NewTreeStore(db),
 	}
 
 	srv := &http.Server{

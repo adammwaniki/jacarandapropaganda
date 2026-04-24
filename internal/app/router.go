@@ -10,6 +10,7 @@ import (
 // focused stubs.
 type Deps struct {
 	Devices DeviceUpserter
+	Trees   TreeReader
 }
 
 // NewRouter builds the top-level handler. The device middleware is wrapped
@@ -20,7 +21,7 @@ func NewRouter(deps Deps) http.Handler {
 
 	app := http.NewServeMux()
 	app.HandleFunc("GET /", handleIndex)
-	app.HandleFunc("GET /trees", handleTrees)
+	app.Handle("GET /trees", handleTreesBbox(deps.Trees))
 
 	top := http.NewServeMux()
 	top.HandleFunc("GET /health", handleHealth)
