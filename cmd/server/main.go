@@ -14,6 +14,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
 
 	"github.com/adammwaniki/jacarandapropaganda/internal/app"
+	"github.com/adammwaniki/jacarandapropaganda/internal/rate"
 	"github.com/adammwaniki/jacarandapropaganda/internal/store"
 )
 
@@ -44,10 +45,12 @@ func main() {
 	}
 	pingCancel()
 
+	limiter := rate.NewLimiter(db)
 	deps := app.Deps{
 		Devices:        store.NewDeviceStore(db),
 		Trees:          store.NewTreeStore(db),
 		Observations:   store.NewObservationStore(db),
+		RateLimiter:    limiter,
 		PhotoURLPrefix: envOr("JP_PHOTO_URL_PREFIX", ""),
 	}
 
@@ -70,6 +73,11 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Nightly prune of rate_events. 24h cadence per spec; the first tick
+	// fires immediately so a fresh deploy does not leave a day of stale rows.
+	go limiter.RunPruneLoop(ctx, 24*time.Hour)
+
 	<-ctx.Done()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

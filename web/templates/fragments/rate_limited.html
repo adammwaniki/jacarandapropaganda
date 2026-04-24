@@ -1,0 +1,19 @@
+{{/*
+  Rendered when a POST is rejected by the rate limiter. The copy is
+  deliberately plain: the user should see a human apology, not an error code.
+  The Scope distinguishes device ("you, come back tomorrow") from IP
+  ("someone on your network is busy too").
+*/}}
+<div class="toast toast--limited" role="status">
+  {{- if eq .Scope "device"}}
+    {{- if eq .Kind "tree_create"}}
+      You've pinned {{.Limit}} new trees in the last 24 hours. Come back tomorrow,
+      or update an existing pin in the meantime.
+    {{- else}}
+      You've updated {{.Limit}} bloom states in the last 24 hours. Give it a rest and come back tomorrow.
+    {{- end}}
+  {{- else}}
+    Many people on your network have been pinning trees today ({{.Limit}} in the last 24 hours).
+    Come back tomorrow from this network, or try from a different one.
+  {{- end}}
+</div>

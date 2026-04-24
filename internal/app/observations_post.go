@@ -24,7 +24,7 @@ type ObservationService interface {
 // handlePostObservation implements POST /trees/{id}/observations. The tree
 // must already exist; this is the "update bloom state" path for an existing
 // pin. Returns 201 + a pin-detail HTML fragment reflecting the new state.
-func handlePostObservation(trees TreeService, obs ObservationService, photoURLPrefix string) http.Handler {
+func handlePostObservation(trees TreeService, obs ObservationService, limiter RateLimiter, photoURLPrefix string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		treeIDStr := r.PathValue("id")
 		treeID, err := uuid.Parse(treeIDStr)
@@ -49,6 +49,14 @@ func handlePostObservation(trees TreeService, obs ObservationService, photoURLPr
 		if !ok {
 			writeError(w, http.StatusInternalServerError, "missing device context")
 			return
+		}
+
+		if limiter != nil {
+			if !enforceRateLimit(w, r, func() error {
+				return limiter.CheckAndRecordObservationCreate(r.Context(), deviceID)
+			}) {
+				return
+			}
 		}
 
 		tree, err := trees.ByID(r.Context(), treeID)

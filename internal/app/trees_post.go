@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"strconv"
 
 	"github.com/adammwaniki/jacarandapropaganda/internal/id"
@@ -37,7 +38,10 @@ type uuidID = uuidFromGoogle
 // handlePostTrees implements POST /trees. Two outcomes:
 //   - dedup candidates found and no force flag → 200 + HTML comparison sheet
 //   - otherwise → 201 + HTML "created" fragment with X-Tree-Id header
-func handlePostTrees(trees TreeService, photoURLPrefix string) http.Handler {
+//
+// The rate limiter runs first — before dedup — so a limited user cannot
+// probe for neighboring trees.
+func handlePostTrees(trees TreeService, limiter RateLimiter, photoURLPrefix string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p, err := parsePostTreeForm(r)
 		if err != nil {
@@ -49,6 +53,21 @@ func handlePostTrees(trees TreeService, photoURLPrefix string) http.Handler {
 		if !ok {
 			writeError(w, http.StatusInternalServerError, "missing device context")
 			return
+		}
+
+		if limiter != nil {
+			ip, ipErr := clientIP(r)
+			if ipErr != nil {
+				slog.WarnContext(r.Context(), "clientIP", "err", ipErr)
+				// Treat an unparseable source as a placeholder IP so the
+				// limiter still records an event but IP scoping is degraded.
+				ip = netip.MustParseAddr("::")
+			}
+			if !enforceRateLimit(w, r, func() error {
+				return limiter.CheckAndRecordTreeCreate(r.Context(), deviceID, ip)
+			}) {
+				return
+			}
 		}
 
 		if !p.force {

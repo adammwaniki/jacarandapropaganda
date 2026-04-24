@@ -104,15 +104,22 @@ func TestObservations_HiddenAtIsSetOnce(t *testing.T) {
 	}
 }
 
-// Keep the "exactly four app tables" invariant alive after adding trigger
-// functions and migrations. Functions are not tables, but this is a cheap
-// second check that migration 0002 did not slip in a fifth table.
-func TestSchema_StillExactlyFourTables(t *testing.T) {
+// TestSchema_DomainStillExactlyFourTables re-asserts the domain-model
+// invariant from the store package. rate_events is operational (spec.md
+// § Rate limiting) and is excluded from the count.
+func TestSchema_DomainStillExactlyFourTables(t *testing.T) {
 	db := freshMigratedDB(t)
 	defer db.Close()
 
-	got := listAppTables(t, db)
-	if len(got) != 4 {
-		t.Fatalf("app tables: got %d (%v), want 4", len(got), got)
+	all := listAppTables(t, db)
+	operational := map[string]bool{"rate_events": true}
+	var domain []string
+	for _, name := range all {
+		if !operational[name] {
+			domain = append(domain, name)
+		}
+	}
+	if len(domain) != 4 {
+		t.Fatalf("domain tables: got %d (%v), want 4", len(domain), domain)
 	}
 }

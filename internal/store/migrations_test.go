@@ -5,6 +5,7 @@ package store_test
 import (
 	"context"
 	"database/sql"
+	"sort"
 	"testing"
 	"time"
 
@@ -15,15 +16,31 @@ import (
 	"github.com/adammwaniki/jacarandapropaganda/migrations"
 )
 
-// expectedTables is the exact set of application tables that must exist after
-// a clean migration. This encodes the spec's "four tables" invariant: any
-// addition to this list is a deliberate act that requires amending the test
-// alongside the spec.
-var expectedTables = []string{
+// expectedDomainTables is the exact set of product-model tables spec.md
+// names as "four tables". Any addition to this list is a spec amendment.
+var expectedDomainTables = []string{
 	"devices",
 	"moderation_queue",
 	"observations",
 	"trees",
+}
+
+// expectedOperationalTables are allowed by the spec but do not carry user-
+// facing meaning. spec.md § Rate limiting permits "a small counter table".
+var expectedOperationalTables = []string{
+	"rate_events",
+}
+
+// expectedTables combines domain + operational (sorted alphabetically to
+// match listAppTables' ordering) — the full set that must exist after
+// migrations have run to head.
+var expectedTables = sortedMerge(expectedDomainTables, expectedOperationalTables)
+
+func sortedMerge(a, b []string) []string {
+	out := append([]string{}, a...)
+	out = append(out, b...)
+	sort.Strings(out)
+	return out
 }
 
 var expectedExtensions = []string{
@@ -66,9 +83,10 @@ func TestMigrations_UpDownUpRoundTripIsReversible(t *testing.T) {
 	assertAppTables(t, db, expectedTables)
 }
 
-func TestMigrations_AppTablesAreExactlyFour(t *testing.T) {
-	// Invariant from spec.md: the data model is four tables. A fifth is a
-	// deliberate act and should force this test to be updated, not ignored.
+func TestMigrations_DomainTablesAreExactlyFour(t *testing.T) {
+	// spec.md's "four tables" invariant applies to the product data model.
+	// Operational tables (rate_events) are permitted by the spec but are
+	// tracked separately in expectedOperationalTables.
 	dsn := testutil.NewTestDB(t)
 	db := openDB(t, dsn)
 	defer db.Close()
@@ -77,9 +95,41 @@ func TestMigrations_AppTablesAreExactlyFour(t *testing.T) {
 		t.Fatalf("up: %v", err)
 	}
 
-	got := listAppTables(t, db)
-	if len(got) != 4 {
-		t.Fatalf("app tables: got %d (%v), want exactly 4", len(got), got)
+	all := listAppTables(t, db)
+	var domain []string
+	opSet := map[string]bool{}
+	for _, t := range expectedOperationalTables {
+		opSet[t] = true
+	}
+	for _, name := range all {
+		if !opSet[name] {
+			domain = append(domain, name)
+		}
+	}
+	if len(domain) != 4 {
+		t.Fatalf("domain tables: got %d (%v), want exactly 4", len(domain), domain)
+	}
+}
+
+func TestMigrations_NoUnknownTables(t *testing.T) {
+	// Complements the domain-tables test: if a rogue migration adds a 6th
+	// operational table, this fails loudly.
+	dsn := testutil.NewTestDB(t)
+	db := openDB(t, dsn)
+	defer db.Close()
+
+	if err := store.MigrateUp(db); err != nil {
+		t.Fatalf("up: %v", err)
+	}
+
+	allowed := map[string]bool{}
+	for _, t := range expectedTables {
+		allowed[t] = true
+	}
+	for _, got := range listAppTables(t, db) {
+		if !allowed[got] {
+			t.Errorf("unknown table %q — update expectedTables after amending the spec", got)
+		}
 	}
 }
 

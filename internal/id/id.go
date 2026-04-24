@@ -18,6 +18,9 @@ func NewObservation() uuid.UUID { return mustV7() }
 // NewModerationRow returns a UUIDv7 intended for the moderation_queue table.
 func NewModerationRow() uuid.UUID { return mustV7() }
 
+// NewRateEvent returns a UUIDv7 intended for the rate_events table.
+func NewRateEvent() uuid.UUID { return mustV7() }
+
 // NewDevice returns a UUIDv4 for device identity. A separate helper makes
 // the privacy invariant loud at call sites.
 func NewDevice() uuid.UUID { return uuid.New() }

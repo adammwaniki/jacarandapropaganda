@@ -12,6 +12,7 @@ type Deps struct {
 	Devices        DeviceUpserter
 	Trees          TreeService
 	Observations   ObservationService
+	RateLimiter    RateLimiter // may be nil in tests; nil means "no limits"
 	PhotoURLPrefix string
 }
 
@@ -24,11 +25,12 @@ func NewRouter(deps Deps) http.Handler {
 	app := http.NewServeMux()
 	app.HandleFunc("GET /", handleIndex)
 	app.Handle("GET /trees", handleTreesBbox(deps.Trees))
-	app.Handle("POST /trees", handlePostTrees(deps.Trees, deps.PhotoURLPrefix))
+	app.Handle("POST /trees",
+		handlePostTrees(deps.Trees, deps.RateLimiter, deps.PhotoURLPrefix))
 	app.Handle("GET /trees/{id}",
 		handleTreeDetail(deps.Trees, deps.Observations, deps.PhotoURLPrefix))
 	app.Handle("POST /trees/{id}/observations",
-		handlePostObservation(deps.Trees, deps.Observations, deps.PhotoURLPrefix))
+		handlePostObservation(deps.Trees, deps.Observations, deps.RateLimiter, deps.PhotoURLPrefix))
 
 	top := http.NewServeMux()
 	top.HandleFunc("GET /health", handleHealth)
