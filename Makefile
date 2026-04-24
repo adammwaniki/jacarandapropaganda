@@ -1,4 +1,4 @@
-.PHONY: help test test-integration test-all run build tidy fmt vet lint dev-up dev-down clean
+.PHONY: help test test-integration test-all run build tidy fmt vet lint dev-up dev-down migrate-up migrate-down migrate-status clean
 
 GO          ?= go
 BINARY      := bin/jacaranda
@@ -14,6 +14,9 @@ help:
 	@echo "  make build             — build single binary to ./bin/jacaranda"
 	@echo "  make dev-up            — start local Postgres + MinIO via compose"
 	@echo "  make dev-down          — stop local dev stack"
+	@echo "  make migrate-up        — apply migrations to the local dev DB"
+	@echo "  make migrate-down      — roll back the most recent migration"
+	@echo "  make migrate-status    — show migration state"
 	@echo "  make fmt vet tidy      — hygiene"
 
 test:
@@ -45,6 +48,15 @@ dev-up:
 
 dev-down:
 	./scripts/dev-down.sh
+
+migrate-up:
+	$(GO) run ./cmd/migrate up
+
+migrate-down:
+	$(GO) run ./cmd/migrate down
+
+migrate-status:
+	$(GO) run ./cmd/migrate status
 
 clean:
 	rm -rf bin

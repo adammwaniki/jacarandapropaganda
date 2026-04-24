@@ -11,7 +11,7 @@ import (
 func TestHealth_ReturnsOK(t *testing.T) {
 	t.Parallel()
 
-	h := NewRouter()
+	h := NewRouter(Deps{Devices: &stubDeviceStore{}})
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()

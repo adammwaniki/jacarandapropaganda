@@ -14,7 +14,7 @@ import (
 func TestIndex_RendersShell(t *testing.T) {
 	t.Parallel()
 
-	h := NewRouter()
+	h := NewRouter(Deps{Devices: &stubDeviceStore{}})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -46,7 +46,7 @@ func TestIndex_CentersOnNairobi(t *testing.T) {
 
 	// The initial map view should be over Nairobi CBD (approx -1.2921, 36.8219).
 	// We assert via the embedded center coordinates in the page source.
-	h := NewRouter()
+	h := NewRouter(Deps{Devices: &stubDeviceStore{}})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)

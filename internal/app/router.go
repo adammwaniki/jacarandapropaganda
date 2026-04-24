@@ -5,12 +5,27 @@ import (
 	"net/http"
 )
 
-func NewRouter() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", handleIndex)
-	mux.HandleFunc("GET /health", handleHealth)
-	mux.HandleFunc("GET /trees", handleTrees)
-	return mux
+// Deps bundles the collaborators the HTTP layer needs. Keeping it as a
+// plain struct keeps call sites legible and makes tests easy to seed with
+// focused stubs.
+type Deps struct {
+	Devices DeviceUpserter
+}
+
+// NewRouter builds the top-level handler. The device middleware is wrapped
+// around the full app routes but not around /health — liveness probes must
+// not mutate the devices table.
+func NewRouter(deps Deps) http.Handler {
+	withDevice := WithDevice(deps.Devices)
+
+	app := http.NewServeMux()
+	app.HandleFunc("GET /", handleIndex)
+	app.HandleFunc("GET /trees", handleTrees)
+
+	top := http.NewServeMux()
+	top.HandleFunc("GET /health", handleHealth)
+	top.Handle("/", withDevice(app))
+	return top
 }
 
 func handleHealth(w http.ResponseWriter, _ *http.Request) {

@@ -15,7 +15,7 @@ import (
 func TestTreesEndpoint_EmptyBbox(t *testing.T) {
 	t.Parallel()
 
-	h := NewRouter()
+	h := NewRouter(Deps{Devices: &stubDeviceStore{}})
 
 	// Nairobi-sized bbox: minLon, minLat, maxLon, maxLat.
 	req := httptest.NewRequest(http.MethodGet, "/trees?bbox=36.6,-1.4,37.0,-1.1", nil)
@@ -50,7 +50,7 @@ func TestTreesEndpoint_EmptyBbox(t *testing.T) {
 func TestTreesEndpoint_RejectsMissingBbox(t *testing.T) {
 	t.Parallel()
 
-	h := NewRouter()
+	h := NewRouter(Deps{Devices: &stubDeviceStore{}})
 	req := httptest.NewRequest(http.MethodGet, "/trees", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -63,7 +63,7 @@ func TestTreesEndpoint_RejectsMissingBbox(t *testing.T) {
 func TestTreesEndpoint_RejectsMalformedBbox(t *testing.T) {
 	t.Parallel()
 
-	h := NewRouter()
+	h := NewRouter(Deps{Devices: &stubDeviceStore{}})
 	req := httptest.NewRequest(http.MethodGet, "/trees?bbox=not,a,real,bbox", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -77,7 +77,7 @@ func TestTreesEndpoint_RejectsInvertedBbox(t *testing.T) {
 	t.Parallel()
 
 	// minLon > maxLon should fail before any store hit — cheap validation.
-	h := NewRouter()
+	h := NewRouter(Deps{Devices: &stubDeviceStore{}})
 	req := httptest.NewRequest(http.MethodGet, "/trees?bbox=37.0,-1.1,36.6,-1.4", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
