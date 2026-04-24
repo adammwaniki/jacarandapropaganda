@@ -1,0 +1,54 @@
+{{/*
+  Rendered when POST /trees finds existing trees within 3m. The sheet shows
+  each candidate with its most recent photo and bloom state, so the user can
+  see what the nearby tree looks like and decide, not guess. Two actions per
+  candidate, plus one global "none of these — pin new".
+*/}}
+<div id="dedup-sheet" class="dedup-sheet" role="dialog" aria-label="Possible matches">
+  <h2 class="dedup-sheet__title">
+    We found {{len .Candidates}} tree{{if ne (len .Candidates) 1}}s{{end}} nearby.
+    Is it one of these?
+  </h2>
+  <ul class="dedup-sheet__list">
+    {{- range .Candidates}}
+    <li class="dedup-sheet__candidate" data-tree-id="{{.Tree.ID}}">
+      {{- with .Latest}}
+        {{- if .PhotoR2Key}}
+          <img class="dedup-sheet__photo"
+               src="{{$.PhotoURLPrefix}}{{.PhotoR2Key}}"
+               alt="Most recent photo of this tree">
+        {{- else}}
+          <div class="dedup-sheet__photo dedup-sheet__photo--empty" aria-hidden="true"></div>
+        {{- end}}
+        <div class="dedup-sheet__state">
+          Last observed: <strong>{{.BloomState}}</strong>
+        </div>
+      {{- else}}
+        <div class="dedup-sheet__photo dedup-sheet__photo--empty" aria-hidden="true"></div>
+        <div class="dedup-sheet__state dedup-sheet__state--unobserved">Not yet observed</div>
+      {{- end}}
+      <div class="dedup-sheet__distance">{{printf "%.1f" .DistanceMeters}}m away</div>
+      <form method="post"
+            action="/trees/{{.Tree.ID}}/observations"
+            class="dedup-sheet__same">
+        <input type="hidden" name="bloom_state" value="{{$.BloomState}}">
+        {{- if $.PhotoKey}}
+        <input type="hidden" name="photo_key" value="{{$.PhotoKey}}">
+        {{- end}}
+        <button type="submit" class="btn btn--same-tree">This is the same tree</button>
+      </form>
+    </li>
+    {{- end}}
+  </ul>
+  <form method="post" action="/trees" class="dedup-sheet__none">
+    <input type="hidden" name="lat" value="{{.Lat}}">
+    <input type="hidden" name="lng" value="{{.Lng}}">
+    <input type="hidden" name="species" value="{{.Species}}">
+    <input type="hidden" name="bloom_state" value="{{.BloomState}}">
+    {{- if .PhotoKey}}
+    <input type="hidden" name="photo_key" value="{{.PhotoKey}}">
+    {{- end}}
+    <input type="hidden" name="force" value="1">
+    <button type="submit" class="btn btn--pin-new">None of these — pin new tree</button>
+  </form>
+</div>

@@ -46,18 +46,19 @@ func (s *ObservationStore) Insert(ctx context.Context, p InsertObservationParams
 	if !p.BloomState.Valid() {
 		return fmt.Errorf("store: invalid bloom_state %q", p.BloomState)
 	}
-	const q = `
-		INSERT INTO observations
-			(id, tree_id, bloom_state, photo_r2_key, reported_by_device)
-		VALUES ($1, $2, $3, $4, $5)
-	`
-	if _, err := s.db.ExecContext(ctx, q,
+	if _, err := s.db.ExecContext(ctx, insertObservationSQL,
 		p.ID, p.TreeID, string(p.BloomState), p.PhotoR2Key, p.ReportedBy,
 	); err != nil {
 		return fmt.Errorf("insert observation: %w", err)
 	}
 	return nil
 }
+
+const insertObservationSQL = `
+	INSERT INTO observations
+		(id, tree_id, bloom_state, photo_r2_key, reported_by_device)
+	VALUES ($1, $2, $3, $4, $5)
+`
 
 // CurrentForTree returns the most recent non-hidden observation for a tree,
 // or ErrNotFound if none exists.

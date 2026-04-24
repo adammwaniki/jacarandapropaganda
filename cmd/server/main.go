@@ -45,8 +45,10 @@ func main() {
 	pingCancel()
 
 	deps := app.Deps{
-		Devices: store.NewDeviceStore(db),
-		Trees:   store.NewTreeStore(db),
+		Devices:        store.NewDeviceStore(db),
+		Trees:          store.NewTreeStore(db),
+		Observations:   store.NewObservationStore(db),
+		PhotoURLPrefix: envOr("JP_PHOTO_URL_PREFIX", ""),
 	}
 
 	srv := &http.Server{

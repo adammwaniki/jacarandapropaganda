@@ -81,25 +81,77 @@ func NewTreeStore(db *sql.DB) *TreeStore {
 // location. Rejects non-UUIDv7 ids because the index-locality benefit only
 // holds if every row uses v7.
 func (s *TreeStore) Insert(ctx context.Context, p InsertTreeParams) error {
+	if err := validateInsertTreeParams(p); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, insertTreeSQL, p.ID, p.Lat, p.Lng, p.Species, p.CreatedBy); err != nil {
+		return fmt.Errorf("insert tree: %w", err)
+	}
+	return nil
+}
+
+// InsertWithObservation creates a tree row and its first observation in a
+// single transaction. If either insert fails, nothing persists — callers
+// never have to deal with an orphan tree that has no bloom state.
+//
+// The observation's TreeID must match the tree's ID. Mismatches are a
+// programmer bug; callers should construct the observation params from the
+// tree params at the call site.
+func (s *TreeStore) InsertWithObservation(ctx context.Context, tp InsertTreeParams, op InsertObservationParams) error {
+	if err := validateInsertTreeParams(tp); err != nil {
+		return err
+	}
+	if op.TreeID != tp.ID {
+		return fmt.Errorf("store: observation.TreeID %v must match tree.ID %v", op.TreeID, tp.ID)
+	}
+	if op.ID.Version() != 7 {
+		return fmt.Errorf("store: observation id must be UUIDv7, got v%d", op.ID.Version())
+	}
+	if !op.BloomState.Valid() {
+		return fmt.Errorf("store: invalid bloom_state %q", op.BloomState)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, insertTreeSQL, tp.ID, tp.Lat, tp.Lng, tp.Species, tp.CreatedBy); err != nil {
+		return fmt.Errorf("insert tree: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, insertObservationSQL,
+		op.ID, op.TreeID, string(op.BloomState), op.PhotoR2Key, op.ReportedBy,
+	); err != nil {
+		return fmt.Errorf("insert observation: %w", err)
+	}
+	return tx.Commit()
+}
+
+const insertTreeSQL = `
+	INSERT INTO trees (id, location, h3_cell_r9, h3_cell_r7, species, created_by_device)
+	VALUES (
+		$1,
+		ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography,
+		h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography, 9)::bigint,
+		h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography, 7)::bigint,
+		$4,
+		$5
+	)
+`
+
+func validateInsertTreeParams(p InsertTreeParams) error {
 	if p.ID.Version() != 7 {
 		return fmt.Errorf("store: tree id must be UUIDv7, got v%d", p.ID.Version())
 	}
 	if p.Species == "" {
 		return errors.New("store: species is required")
 	}
-	const q = `
-		INSERT INTO trees (id, location, h3_cell_r9, h3_cell_r7, species, created_by_device)
-		VALUES (
-			$1,
-			ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography,
-			h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography, 9)::bigint,
-			h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography, 7)::bigint,
-			$4,
-			$5
-		)
-	`
-	if _, err := s.db.ExecContext(ctx, q, p.ID, p.Lat, p.Lng, p.Species, p.CreatedBy); err != nil {
-		return fmt.Errorf("insert tree: %w", err)
+	if p.Lat < -90 || p.Lat > 90 {
+		return fmt.Errorf("store: lat out of range: %v", p.Lat)
+	}
+	if p.Lng < -180 || p.Lng > 180 {
+		return fmt.Errorf("store: lng out of range: %v", p.Lng)
 	}
 	return nil
 }

@@ -1,0 +1,8 @@
+{{/*
+  Rendered on successful POST /trees. Keeps the response small — the client
+  reads the X-Tree-Id header and triggers a map refresh. The body is for
+  users whose client did not wire the header handling.
+*/}}
+<div class="toast toast--created" data-tree-id="{{.ID}}" role="status">
+  Pinned. Thank you for noticing.
+</div>

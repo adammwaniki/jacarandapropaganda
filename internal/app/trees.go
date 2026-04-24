@@ -10,9 +10,8 @@ import (
 	"github.com/adammwaniki/jacarandapropaganda/internal/store"
 )
 
-// TreeReader is the subset of the tree store the handler depends on. Keeps
-// the app package free of an SQL driver dependency at the import boundary
-// and makes wiring tests trivial.
+// TreeReader is the subset of the tree store used by read-only endpoints.
+// Write-path collaborators extend this via TreeService in trees_post.go.
 type TreeReader interface {
 	ByBbox(ctx context.Context, b geo.Bbox) ([]store.TreeWithState, error)
 }

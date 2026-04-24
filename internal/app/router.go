@@ -9,8 +9,10 @@ import (
 // plain struct keeps call sites legible and makes tests easy to seed with
 // focused stubs.
 type Deps struct {
-	Devices DeviceUpserter
-	Trees   TreeReader
+	Devices        DeviceUpserter
+	Trees          TreeService
+	Observations   ObservationService
+	PhotoURLPrefix string
 }
 
 // NewRouter builds the top-level handler. The device middleware is wrapped
@@ -22,6 +24,11 @@ func NewRouter(deps Deps) http.Handler {
 	app := http.NewServeMux()
 	app.HandleFunc("GET /", handleIndex)
 	app.Handle("GET /trees", handleTreesBbox(deps.Trees))
+	app.Handle("POST /trees", handlePostTrees(deps.Trees, deps.PhotoURLPrefix))
+	app.Handle("GET /trees/{id}",
+		handleTreeDetail(deps.Trees, deps.Observations, deps.PhotoURLPrefix))
+	app.Handle("POST /trees/{id}/observations",
+		handlePostObservation(deps.Trees, deps.Observations, deps.PhotoURLPrefix))
 
 	top := http.NewServeMux()
 	top.HandleFunc("GET /health", handleHealth)

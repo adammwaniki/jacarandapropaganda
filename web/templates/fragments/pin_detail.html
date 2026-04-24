@@ -1,0 +1,37 @@
+{{/*
+  Rendered when the user taps a pin on the map, and after they submit a new
+  observation on an existing tree. Kept as a single fragment so the client
+  can swap a detail sheet in place.
+*/}}
+<div class="pin-detail" data-tree-id="{{.Tree.ID}}" role="dialog" aria-label="Tree detail">
+  {{- with .Latest}}
+    {{- if .PhotoR2Key}}
+      <img class="pin-detail__photo"
+           src="{{$.PhotoURLPrefix}}{{.PhotoR2Key}}"
+           alt="Most recent photo of this tree">
+    {{- end}}
+    <div class="pin-detail__state">
+      Current state: <strong>{{.BloomState}}</strong>
+    </div>
+    <div class="pin-detail__observed">
+      Last observed <time datetime="{{.ObservedAt.Format "2006-01-02T15:04:05Z07:00"}}">
+        {{.ObservedAt.Format "2 Jan 2006, 15:04 MST"}}
+      </time>
+    </div>
+  {{- else}}
+    <div class="pin-detail__state pin-detail__state--unobserved">
+      Pinned but not yet observed.
+    </div>
+  {{- end}}
+  <div class="pin-detail__species">Species: <em>{{.Tree.Species}}</em></div>
+
+  <form method="post" action="/trees/{{.Tree.ID}}/observations" class="pin-detail__update">
+    <fieldset>
+      <legend>Update the bloom state</legend>
+      <button type="submit" name="bloom_state" value="budding">Budding</button>
+      <button type="submit" name="bloom_state" value="partial">Partial</button>
+      <button type="submit" name="bloom_state" value="full">Full</button>
+      <button type="submit" name="bloom_state" value="fading">Fading</button>
+    </fieldset>
+  </form>
+</div>

@@ -10,67 +10,363 @@
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 
   <style>
-    :root { color-scheme: dark; }
-    html, body { margin: 0; height: 100%; background: #0c0712; font-family: system-ui, sans-serif; }
+    :root {
+      color-scheme: dark;
+      --jp-bg: #0c0712;
+      --jp-panel: rgba(20, 10, 35, 0.88);
+      --jp-ink: #efe9ff;
+      --jp-ink-soft: #bca9dd;
+      --jp-accent: #9a6bff;
+      --jp-budding: #c7a3ff;
+      --jp-partial: #9a6bff;
+      --jp-full: #6b2ecd;
+      --jp-fading: #4a276f;
+    }
+    html, body { margin: 0; height: 100%; background: var(--jp-bg); font-family: system-ui, sans-serif; color: var(--jp-ink); }
     #map { position: fixed; inset: 0; }
+
     .attribution {
       position: fixed; bottom: 0; right: 0;
-      padding: 4px 8px; font-size: 11px; color: #bca9dd;
-      background: rgba(20, 10, 35, 0.6);
+      padding: 4px 8px; font-size: 11px; color: var(--jp-ink-soft);
+      background: var(--jp-panel);
     }
+
+    .pin-button {
+      position: fixed; bottom: 24px; right: 24px;
+      width: 64px; height: 64px; border-radius: 50%;
+      background: var(--jp-accent); color: white;
+      border: none; font-size: 32px; line-height: 1;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.4);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 10;
+    }
+    .pin-button:disabled { opacity: 0.6; cursor: progress; }
+
+    .sheet {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      background: var(--jp-panel);
+      backdrop-filter: blur(12px);
+      color: var(--jp-ink);
+      padding: 20px 20px 32px;
+      border-top-left-radius: 16px; border-top-right-radius: 16px;
+      max-height: 70vh; overflow-y: auto; z-index: 11;
+    }
+    .sheet[hidden] { display: none; }
+    .sheet h2 { font-size: 18px; margin: 0 0 12px; }
+    .sheet .btn {
+      display: inline-block;
+      font-size: 15px; padding: 10px 16px;
+      border-radius: 8px; border: 1px solid var(--jp-ink-soft);
+      background: transparent; color: var(--jp-ink);
+      cursor: pointer; margin: 4px 4px 4px 0;
+    }
+    .sheet .btn--primary { background: var(--jp-accent); border-color: var(--jp-accent); }
+    .sheet fieldset { border: none; padding: 0; margin: 0; }
+    .sheet legend { font-size: 14px; color: var(--jp-ink-soft); margin-bottom: 8px; }
+
+    .dedup-sheet__list { list-style: none; padding: 0; margin: 0 0 16px; }
+    .dedup-sheet__candidate {
+      display: grid; grid-template-columns: 80px 1fr auto; gap: 12px;
+      align-items: center; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .dedup-sheet__photo { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; background: #241536; }
+    .dedup-sheet__photo--empty { background: linear-gradient(135deg, #241536, #1b0f2a); }
+    .dedup-sheet__distance { font-size: 12px; color: var(--jp-ink-soft); }
+    .dedup-sheet__same, .dedup-sheet__none { display: inline; }
+    .dedup-sheet__same { grid-column: 1 / -1; margin-top: 4px; }
+
+    .pin-detail { display: flex; flex-direction: column; gap: 8px; }
+    .pin-detail__photo { width: 100%; max-height: 280px; object-fit: cover; border-radius: 8px; }
+    .pin-detail__state { font-size: 16px; }
+    .pin-detail__species { font-size: 13px; color: var(--jp-ink-soft); }
+    .pin-detail__update fieldset { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .status-bar {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      background: var(--jp-panel); padding: 8px 16px; border-radius: 24px;
+      font-size: 13px; z-index: 12;
+    }
+    .status-bar[hidden] { display: none; }
+
+    .toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+             background: var(--jp-panel); padding: 12px 20px; border-radius: 24px;
+             font-size: 14px; z-index: 12; }
   </style>
 </head>
-<body>
+<body x-data="jpApp()" x-init="init()">
   <div id="map" aria-label="Map of Nairobi jacaranda trees"></div>
   <div class="attribution">© OpenStreetMap contributors · Protomaps</div>
+
+  <div class="status-bar" x-show="status" x-text="status" x-cloak></div>
+
+  <button class="pin-button"
+          :disabled="pinning"
+          @click="startPin()"
+          aria-label="Pin a jacaranda you can see">
+    <span x-show="!pinning">+</span>
+    <span x-show="pinning" x-cloak>…</span>
+  </button>
+
+  <aside class="sheet" x-show="sheet.open" x-html="sheet.html" x-cloak></aside>
+
+  <aside class="sheet" x-show="bloomPicker.open" x-cloak>
+    <h2>What stage is this tree?</h2>
+    <fieldset>
+      <legend>Pick one</legend>
+      <button class="btn" @click="submitNewPin('budding')">Budding</button>
+      <button class="btn" @click="submitNewPin('partial')">Partial bloom</button>
+      <button class="btn btn--primary" @click="submitNewPin('full')">Full bloom</button>
+      <button class="btn" @click="submitNewPin('fading')">Fading</button>
+    </fieldset>
+    <button class="btn" @click="cancelPin()" style="margin-top: 16px;">Cancel</button>
+  </aside>
 
   <script defer src="https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/pmtiles@3.2.1/dist/pmtiles.js"></script>
 
   <script>
-    (function () {
-      // Nairobi CBD. The initial view is intentionally muted: wide enough
-      // to see the city, tight enough that a pin feels local.
-      const NAIROBI = [36.8219, -1.2921];
+    // Nairobi CBD — the initial map view.
+    const NAIROBI = [36.8219, -1.2921];
 
-      const protocol = new pmtiles.Protocol();
-      maplibregl.addProtocol('pmtiles', protocol.tile);
+    function jpApp() {
+      return {
+        map: null,
+        pinning: false,
+        status: "",
+        pendingCoords: null,   // { lat, lng } while the bloom picker is open
+        sheet:       { open: false, html: "" },
+        bloomPicker: { open: false },
 
-      const pmtilesURL = {{ .PMTilesURL }};
+        init() {
+          const protocol = new pmtiles.Protocol();
+          maplibregl.addProtocol('pmtiles', protocol.tile);
 
-      const map = new maplibregl.Map({
-        container: 'map',
-        center: NAIROBI,
-        zoom: 11,
-        minZoom: 9,
-        maxZoom: 19,
-        hash: true,
-        style: {
-          version: 8,
-          sources: pmtilesURL ? {
+          const pmtilesURL = {{ .PMTilesURL }};
+
+          const sources = pmtilesURL ? {
             'protomaps': {
               type: 'vector',
               url: 'pmtiles://' + pmtilesURL,
               attribution: '© OpenStreetMap · Protomaps'
             }
-          } : {},
-          // Placeholder muted style. Phase G replaces this with a hand-crafted
-          // style JSON that is the project's visual identity.
-          layers: [
-            {
-              id: 'background',
-              type: 'background',
-              paint: { 'background-color': '#120820' }
+          } : {};
+
+          this.map = new maplibregl.Map({
+            container: 'map',
+            center: NAIROBI, zoom: 11,
+            minZoom: 9, maxZoom: 19, hash: true,
+            style: {
+              version: 8,
+              sources,
+              layers: [
+                { id: 'background', type: 'background', paint: { 'background-color': '#120820' } }
+              ]
             }
-          ]
+          });
+          this.map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+          this.map.on('load', () => this.onMapLoad());
+          window.__jpMap = this.map; // for debugging
+        },
+
+        onMapLoad() {
+          this.map.addSource('trees', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] }
+          });
+          this.map.addLayer({
+            id: 'trees-circle',
+            type: 'circle',
+            source: 'trees',
+            paint: {
+              'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 3, 14, 6, 18, 10],
+              'circle-color': [
+                'match', ['get', 'bloom_state'],
+                'budding', '#c7a3ff',
+                'partial', '#9a6bff',
+                'full',    '#6b2ecd',
+                'fading',  '#4a276f',
+                '#7a5ca8' // unobserved fallback
+              ],
+              'circle-stroke-width': 1.5,
+              'circle-stroke-color': '#efe9ff',
+              'circle-opacity': 0.92
+            }
+          });
+          this.map.on('moveend', () => this.refreshPins());
+          this.map.on('click', 'trees-circle', (e) => {
+            const f = e.features && e.features[0];
+            if (f) this.openPin(f.id || f.properties.id);
+          });
+          this.map.on('mouseenter', 'trees-circle', () => { this.map.getCanvas().style.cursor = 'pointer'; });
+          this.map.on('mouseleave', 'trees-circle', () => { this.map.getCanvas().style.cursor = ''; });
+          this.refreshPins();
+        },
+
+        async refreshPins() {
+          if (!this.map) return;
+          const b = this.map.getBounds();
+          // Guard against huge viewports (> ~100km square) — the server rejects these too.
+          if (Math.abs(b.getEast() - b.getWest()) > 1.0 || Math.abs(b.getNorth() - b.getSouth()) > 1.0) return;
+          const url = `/trees?bbox=${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+          try {
+            const res = await fetch(url, { credentials: 'same-origin' });
+            if (!res.ok) { this.flash(`Couldn't load pins (${res.status})`); return; }
+            const fc = await res.json();
+            this.map.getSource('trees').setData(fc);
+          } catch (err) {
+            this.flash("Network error loading pins");
+          }
+        },
+
+        startPin() {
+          if (!('geolocation' in navigator)) {
+            this.flash("Your browser can't share location");
+            return;
+          }
+          this.pinning = true;
+          this.status = "Getting your location…";
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              this.status = "";
+              this.pendingCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+              this.bloomPicker.open = true;
+            },
+            (err) => {
+              this.pinning = false;
+              this.status = "";
+              this.flash(err.code === 1 ? "Location denied" : "Couldn't get your location");
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+          );
+        },
+
+        cancelPin() {
+          this.pinning = false;
+          this.pendingCoords = null;
+          this.bloomPicker.open = false;
+        },
+
+        async submitNewPin(bloomState) {
+          const coords = this.pendingCoords;
+          if (!coords) return;
+          this.bloomPicker.open = false;
+          this.status = "Saving pin…";
+          const body = new URLSearchParams({
+            lat: coords.lat.toFixed(6),
+            lng: coords.lng.toFixed(6),
+            bloom_state: bloomState
+          });
+          try {
+            const res = await fetch("/trees", {
+              method: "POST",
+              body,
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              credentials: "same-origin"
+            });
+            if (res.status === 200) {
+              // Dedup fragment. Stash coords for the "none of these" form.
+              const html = await res.text();
+              this.sheet.html = html;
+              this.sheet.open = true;
+              this.pinning = false;
+              this.status = "";
+              return;
+            }
+            if (res.status === 201) {
+              this.pinning = false;
+              this.status = "";
+              this.pendingCoords = null;
+              this.flash("Pinned. Thank you for noticing.");
+              await this.refreshPins();
+              return;
+            }
+            const errText = await res.text();
+            this.flash(`Couldn't save: ${errText || res.status}`);
+          } catch (err) {
+            this.flash("Network error saving pin");
+          } finally {
+            this.pinning = false;
+            this.status = "";
+          }
+        },
+
+        async openPin(treeID) {
+          if (!treeID) return;
+          try {
+            const res = await fetch(`/trees/${treeID}`, { credentials: "same-origin" });
+            if (!res.ok) { this.flash(`Couldn't open tree (${res.status})`); return; }
+            this.sheet.html = await res.text();
+            this.sheet.open = true;
+          } catch (err) {
+            this.flash("Network error loading tree");
+          }
+        },
+
+        flash(msg) {
+          this.status = msg;
+          setTimeout(() => { if (this.status === msg) this.status = ""; }, 3500);
+        },
+      };
+    }
+
+    // Intercept clicks inside the sheet so "same tree" / "none of these" /
+    // pin-detail buttons submit via fetch and keep the sheet swap-able.
+    document.addEventListener('submit', async (e) => {
+      const form = e.target.closest('form');
+      if (!form) return;
+      const sheet = form.closest('.sheet');
+      if (!sheet) return; // plain forms keep their default behavior
+      e.preventDefault();
+      const fd = new FormData(form);
+      const body = new URLSearchParams();
+      for (const [k, v] of fd.entries()) body.append(k, v);
+      try {
+        const res = await fetch(form.action, {
+          method: form.method || 'POST', body,
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          credentials: "same-origin"
+        });
+        const html = await res.text();
+        const app = window.__jpAlpine;
+        if (res.status >= 400) {
+          if (app) app.flash(`Error (${res.status})`);
+          return;
+        }
+        if (res.status === 201 && res.headers.get('X-Tree-Id')) {
+          // A brand new tree was just created. Close the sheet, refresh pins.
+          if (app) {
+            app.sheet.open = false;
+            app.sheet.html = "";
+            app.flash("Pinned. Thank you for noticing.");
+            await app.refreshPins();
+          }
+          return;
+        }
+        // Otherwise: swap the sheet body with the returned fragment
+        // (pin-detail after observation, or updated dedup).
+        if (app) {
+          app.sheet.html = html;
+          app.sheet.open = true;
+          await app.refreshPins();
+        }
+      } catch (err) {
+        const app = window.__jpAlpine;
+        if (app) app.flash("Network error");
+      }
+    });
+
+    // Expose the Alpine root component so the global submit handler can call it.
+    document.addEventListener('alpine:init', () => {
+      // Keep a reference after the component mounts.
+      queueMicrotask(() => {
+        const root = document.querySelector('[x-data]');
+        if (root && root._x_dataStack) {
+          window.__jpAlpine = root._x_dataStack[0];
         }
       });
-
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-
-      window.__jpMap = map; // test + debug hook
-    })();
+    });
   </script>
 </body>
 </html>
